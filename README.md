@@ -2,16 +2,19 @@
 
 ## Stack
 - Frontend: Next.js, TailwindCSS, TypeScript
-- Backend: FastAPI, SQLModel, Alembic, PostgreSQL
+- Backend: FastAPI, SQLModel, Alembic, MySQL
 - Auth: JWT
 
 ## Development
 - Backend and database run with Docker
-- Frontend runs with npm scripts
+- Frontend runs with npm scripts (dev at http://localhost:3010)
 
 ## Setup
 - Copy `.env.example` and configure as needed
 - Ensure Docker is running
+  - MySQL variables used by docker-compose:
+    - `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`
+  - Backend `DATABASE_URL` (defaults): `mysql+pymysql://app:app@db:3306/app`
 
 ## Backend
 ### Start services
