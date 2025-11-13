@@ -36,4 +36,4 @@ npm install
 npm run dev
 ```
 
-App is available at `http://localhost:3000`.
+App is available at `http://localhost:3010`.
