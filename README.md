@@ -7,7 +7,7 @@
 
 ## Development
 - Backend and database run with Docker
-- Frontend runs with npm scripts (dev at http://localhost:3010)
+- Frontend runs with npm scripts (dev at http://localhost:3000)
 
 ## Setup
 - Copy `.env.example` and configure as needed
@@ -39,4 +39,4 @@ npm install
 npm run dev
 ```
 
-App is available at `http://localhost:3010`.
+App is available at `http://localhost:3000`.
