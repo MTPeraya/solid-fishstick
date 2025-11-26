@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 import jwt
 from ..config.settings import settings
 from ..models.user import User
-from ..main import get_session
+from ..db import get_session
 
 
 def create_access_token(user_id: int) -> str:
