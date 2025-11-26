@@ -5,6 +5,14 @@ from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 from app.config.settings import settings
 from app.models import user as user_model
+from app.models import product as product_model
+from app.models import promotion as promotion_model
+from app.models import membership_tier as membership_tier_model
+from app.models import member as member_model
+from app.models import transaction as transaction_model
+from app.models import transaction_item as transaction_item_model
+from app.models import cashier as cashier_model
+from app.models import manager as manager_model
 
 
 config = context.config
