@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import SQLModel, create_engine, Session
+from sqlmodel import create_engine, Session
 from .config.settings import settings
 from .middleware.auth_middleware import AuthMiddleware
 from .routes.v1.items import router as items_router
@@ -30,9 +30,6 @@ app.add_middleware(
 app.add_middleware(AuthMiddleware)
 
 
-@app.on_event("startup")
-def on_startup():
-    SQLModel.metadata.create_all(engine)
 
 
 app.include_router(items_router)
