@@ -19,18 +19,18 @@ export function useAuth() {
       setUser(null)
       return
     }
-    api.get('/api/v1/users/me', { headers: { Authorization: `Bearer ${token}` } }).then((u: User) => setUser(u)).catch(() => setUser(null))
+    api.get('/api/users/me', { headers: { Authorization: `Bearer ${token}` } }).then((u: User) => setUser(u)).catch(() => setUser(null))
   }, [token])
 
   const signin = useCallback(async (email: string, password: string) => {
-    const data = await api.post('/api/v1/users/signin', { email, password })
+    const data = await api.post('/api/users/signin', { email, password })
     const t = data.access_token as string
     localStorage.setItem('token', t)
     setToken(t)
   }, [])
 
   const signup = useCallback(async (email: string, password: string) => {
-    await api.post('/api/v1/users/signup', { email, password })
+    await api.post('/api/users/signup', { email, password })
     await signin(email, password)
   }, [signin])
 
