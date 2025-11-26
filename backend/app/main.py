@@ -1,18 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import SQLModel, create_engine, Session
+from .db import engine, get_session
 from .config.settings import settings
 from .middleware.auth_middleware import AuthMiddleware
-from .routes.v1.items import router as items_router
-from .routes.v1.users import router as users_router
+from .routes.items import router as items_router
+from .routes.users import router as users_router
 
 
-engine = create_engine(settings.database_url, echo=False)
-
-
-def get_session():
-    with Session(engine) as session:
-        yield session
+pass
 
 
 app = FastAPI()
@@ -30,9 +25,6 @@ app.add_middleware(
 app.add_middleware(AuthMiddleware)
 
 
-@app.on_event("startup")
-def on_startup():
-    SQLModel.metadata.create_all(engine)
 
 
 app.include_router(items_router)
