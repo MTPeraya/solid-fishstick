@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '../../hooks/useAuth'
 
@@ -87,6 +88,10 @@ export default function SignUpPage() {
           </div>
           <button className="bg-black text-white px-4 py-2 rounded-lg w-full" type="submit" disabled={loading}>{loading ? 'Creating account…' : 'Create Account'}</button>
         </form>
+        <div className="flex items-center justify-center text-sm">
+          <span className="text-gray-600">Already have an account?</span>
+          <Link className="ml-1 underline" href="/">Sign in</Link>
+        </div>
         {err && <div className="text-sm text-red-600 text-center">{err}</div>}
       </div>
     </div>
