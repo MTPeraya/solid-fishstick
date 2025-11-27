@@ -19,3 +19,29 @@ pnpm-debug.log*
 **/.venv/
 **/.env
 **/.env.*
+
+# Local SQLite databases
+backend/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# IDE and editor settings
+**/.vscode/
+**/.idea/
+
+# TypeScript incremental build info
+**/*.tsbuildinfo
+
+# Linters and tooling caches
+**/.eslintcache
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Coverage outputs
+**/.coverage
+**/coverage/
+**/htmlcov/
+
+# Editor swap files
+**/*.swp
+**/*.swo
