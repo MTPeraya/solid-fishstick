@@ -6,12 +6,12 @@ client = TestClient(app)
 
 
 def test_list_items_empty():
-    r = client.get("/api/v1/items")
+    r = client.get("/api/items")
     assert r.status_code == 200
     assert r.json() == []
 
 
 def test_create_item():
-    r = client.post("/api/v1/items", json={"name": "A"})
+    r = client.post("/api/items", json={"name": "A"})
     assert r.status_code == 200
     assert r.json()["name"] == "A"

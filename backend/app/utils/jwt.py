@@ -7,9 +7,9 @@ from ..models.user import User
 from ..db import get_session
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_uid: str) -> str:
     exp = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"sub": str(user_id), "exp": exp}
+    payload = {"sub": user_uid, "exp": exp}
     token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     return token
 
@@ -30,7 +30,7 @@ def get_current_user(request: Request, session: Session = Depends(get_session)) 
     sub = payload.get("sub")
     if sub is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    statement = select(User).where(User.id == int(sub))
+    statement = select(User).where(User.uid == sub)
     user = session.exec(statement).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")

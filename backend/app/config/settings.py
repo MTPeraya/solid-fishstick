@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     cors_origins: List[str] = ["http://localhost:3000"]
+    manager_signup_code: str = "ef276129"
     model_config = SettingsConfigDict(env_file=".env", env_prefix="", case_sensitive=False)
 
 
