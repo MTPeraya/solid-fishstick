@@ -44,7 +44,7 @@ export default function SignUpPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-sm p-8 space-y-5">
+      <div className="w-full max-w-md p-8 space-y-5">
         <h1 className="text-2xl font-semibold text-center">Create your account</h1>
         <form className="space-y-4" onSubmit={onSubmit}>
           <input className="border rounded-lg w-full px-3 py-2" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full Name" required />
