@@ -1,20 +1,27 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, constr
 from datetime import datetime
 
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str
+    password: constr(min_length=6, max_length=72)
+    username: str
+    name: str
+    role: str
+    manager_secret: str | None = None
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    identifier: str
     password: str
 
 
 class UserRead(BaseModel):
-    id: int
+    uid: str
     email: EmailStr
+    username: str
+    name: str
+    role: str
     is_active: bool
     created_at: datetime
 

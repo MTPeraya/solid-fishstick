@@ -17,5 +17,5 @@ def get_items() -> List[ItemOut]:
 
 
 def add_item(item: ItemIn) -> ItemOut:
-    saved = create_item(item.dict())
+    saved = create_item(item.model_dump())
     return ItemOut(**saved)
