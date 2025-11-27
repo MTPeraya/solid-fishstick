@@ -4,7 +4,6 @@ from sqlmodel import SQLModel
 from .db import engine, get_session
 from .config.settings import settings
 from .middleware.auth_middleware import AuthMiddleware
-from .routes.items import router as items_router
 from .routes.users import router as users_router
 
 
@@ -29,7 +28,6 @@ app.add_middleware(AuthMiddleware)
 
 
 
-app.include_router(items_router)
 app.include_router(users_router)
 
 
