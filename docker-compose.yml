@@ -1,4 +1,5 @@
 version: "3.9"
+
 services:
   db:
     image: postgres:16
@@ -34,6 +35,18 @@ services:
       - ./backend/app:/app/app
       - ./backend/migrations:/app/migrations
       - ./backend/alembic.ini:/app/alembic.ini
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    command: "npm run dev"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      NEXT_PUBLIC_BACKEND_URL: "http://localhost:8000"
 
 volumes:
   pgdata:
