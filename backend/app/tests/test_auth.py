@@ -143,3 +143,46 @@ def test_signup_invalid_email_fails():
     }
     r = client.post("/api/users/signup", json=payload)
     assert r.status_code == 422
+
+
+def test_list_users_requires_manager():
+    # create cashier
+    c_payload = {
+        "email": "listc@example.com",
+        "password": "secret12",
+        "username": "listcashier",
+        "name": "List Cashier",
+        "role": "cashier",
+    }
+    rc = client.post("/api/users/signup", json=c_payload)
+    assert rc.status_code == 200
+    # sign in cashier
+    rci = client.post("/api/users/signin", json={"identifier": c_payload["email"], "password": c_payload["password"]})
+    assert rci.status_code == 200
+    cashier_token = rci.json()["access_token"]
+    # cashier should be forbidden
+    rforbid = client.get("/api/users", headers={"Authorization": f"Bearer {cashier_token}"})
+    assert rforbid.status_code == 403
+
+    # create manager
+    m_payload = {
+        "email": "listm@example.com",
+        "password": "secret12",
+        "username": "listmanager",
+        "name": "List Manager",
+        "role": "manager",
+        "manager_secret": "ef276129",
+    }
+    rm = client.post("/api/users/signup", json=m_payload)
+    assert rm.status_code == 200
+    # sign in manager
+    rmi = client.post("/api/users/signin", json={"identifier": m_payload["email"], "password": m_payload["password"]})
+    assert rmi.status_code == 200
+    manager_token = rmi.json()["access_token"]
+    # list users
+    rl = client.get("/api/users", headers={"Authorization": f"Bearer {manager_token}"})
+    assert rl.status_code == 200
+    lst = rl.json()
+    assert isinstance(lst, list)
+    assert any(u["email"] == c_payload["email"] for u in lst)
+    assert any(u["email"] == m_payload["email"] for u in lst)

@@ -1,3 +1,4 @@
+from typing import List
 from sqlmodel import Session, select
 from sqlalchemy import or_
 from passlib.context import CryptContext
@@ -45,3 +46,8 @@ def signin(data: UserLogin, session: Session) -> Token:
 
 def to_user_read(user: User) -> UserRead:
     return UserRead(uid=user.uid, email=user.email, username=user.username, name=user.name, role=user.role, is_active=user.is_active, created_at=user.created_at)
+
+
+def list_users(session: Session) -> List[UserRead]:
+    users = session.exec(select(User)).all()
+    return [to_user_read(u) for u in users]

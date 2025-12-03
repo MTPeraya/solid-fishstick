@@ -32,6 +32,7 @@ export default function SignUpPage() {
       }
       if (password.length < 6 || password.length > 72) {
         setLoading(false)
+        setErr('Password must be 6–72 characters')
         return
       }
       if (role === 'manager' && !showSecret) {
