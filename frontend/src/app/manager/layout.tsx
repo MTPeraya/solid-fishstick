@@ -58,13 +58,13 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
         </button>
         {sidebarOpen && (
           <div className="mt-12 p-4 space-y-3">
-            <Link href="/manager/dashboard" className="font-semibold hover:text-black text-gray-700">Dashboard</Link>
-            <ul className="text-sm space-y-2">
+            <Link href="/manager/dashboard" className="text-lg font-semibold hover:text-black text-gray-700">Dashboard</Link>
+            <ul className="space-y-2">
               {items.map((item) => (
                 <li key={item.key}>
                   <Link
                     href={item.href}
-                    className={`${pathname === item.href ? 'text-black font-medium' : 'text-gray-600'} hover:text-black`}
+                    className={`text-lg ${pathname === item.href ? 'text-black font-medium' : 'text-gray-600'} hover:text-black`}
                   >
                     {item.label}
                   </Link>
@@ -73,13 +73,23 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
             </ul>
           </div>
         )}
+        {sidebarOpen && (
+          <div className="absolute bottom-4 left-3 right-3">
+            <Link
+              href="/pos"
+              className="block w-full text-center px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 hover:border-gray-400"
+            >
+              Back to POS
+            </Link>
+          </div>
+        )}
       </aside>
 
       <main className="flex-1 p-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold">{title}</h1>
           <div className="flex items-center gap-3">
-            <div className="text-sm">{user.name || user.username}</div>
+            <div className="text-lg font-medium">{user.name || user.username}</div>
             <button
               className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-black text-white hover:bg-gray-900"
               onClick={() => { signout(); router.push('/') }}
