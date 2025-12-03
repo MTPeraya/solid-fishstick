@@ -6,13 +6,20 @@ async function request(path: string, options?: RequestInit) {
     ...options,
   })
   if (!res.ok) {
-    try {
-      const data = await res.json()
-      const msg = (data && (data.detail || data.message)) || JSON.stringify(data)
+    let data: any = null
+    try { data = await res.json() } catch {}
+    if (data) {
+      const detail = data.detail
+      if (Array.isArray(detail) && detail.length > 0) {
+        const d = detail[0]
+        const field = Array.isArray(d?.loc) ? d.loc[d.loc.length - 1] : ''
+        const msg = d?.msg || data.message || 'Validation error'
+        throw new Error(field ? `${field}: ${msg}` : msg)
+      }
+      const msg = (data.detail || data.message) || JSON.stringify(data)
       throw new Error(msg)
-    } catch {
-      throw new Error(await res.text())
     }
+    throw new Error(await res.text())
   }
   return res.json()
 }

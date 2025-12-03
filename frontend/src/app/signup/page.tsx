@@ -18,12 +18,18 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const invalidPwd = password.length > 0 && (password.length < 6 || password.length > 72)
+  const invalidEmail = email.trim().length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setErr(null)
     setLoading(true)
     try {
+      if (invalidEmail) {
+        setLoading(false)
+        setErr('Please enter a valid email address')
+        return
+      }
       if (password.length < 6 || password.length > 72) {
         setLoading(false)
         return
@@ -50,6 +56,7 @@ export default function SignUpPage() {
           <input className="border rounded-lg w-full px-3 py-2" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full Name" required />
           <input className="border rounded-lg w-full px-3 py-2" type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Username" required />
           <input className="border rounded-lg w-full px-3 py-2" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required />
+          {invalidEmail && <div className="text-xs text-red-600 mt-1" aria-live="polite">Enter a valid email address</div>}
           <div>
             <input className="border rounded-lg w-full px-3 py-2" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required />
             {invalidPwd && <div className="text-xs text-red-600 mt-1">Password must be 6–72 characters</div>}
@@ -86,7 +93,7 @@ export default function SignUpPage() {
               <input className="border rounded-lg w-full px-3 py-2" type="text" value={managerSecret} onChange={(e) => setManagerSecret(e.target.value)} placeholder="Enter secret" required={role === 'manager'} />
             </div>
           </div>
-          <button className="bg-black text-white px-4 py-2 rounded-lg w-full" type="submit" disabled={loading}>{loading ? 'Creating account…' : 'Create Account'}</button>
+          <button className="bg-black text-white px-4 py-2 rounded-lg w-full disabled:opacity-60" type="submit" disabled={loading || invalidEmail || invalidPwd}>{loading ? 'Creating account…' : 'Create Account'}</button>
         </form>
         <div className="flex items-center justify-center text-sm">
           <span className="text-gray-600">Already have an account?</span>

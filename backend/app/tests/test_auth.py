@@ -131,3 +131,15 @@ def test_signin_wrong_password_fails():
 def test_signin_unknown_identifier_fails():
     ri = client.post("/api/users/signin", json={"identifier": "nouser@example.com", "password": "anything"})
     assert ri.status_code == 401
+
+
+def test_signup_invalid_email_fails():
+    payload = {
+        "email": "invalid-email",
+        "password": "secret12",
+        "username": "invalidemailuser",
+        "name": "Invalid Email",
+        "role": "cashier",
+    }
+    r = client.post("/api/users/signup", json=payload)
+    assert r.status_code == 422

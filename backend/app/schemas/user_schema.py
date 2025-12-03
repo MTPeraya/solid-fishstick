@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, constr
+from pydantic import BaseModel, EmailStr, constr, field_validator
 from datetime import datetime
 
 
@@ -9,6 +9,16 @@ class UserCreate(BaseModel):
     name: str
     role: str
     manager_secret: str | None = None
+
+    @field_validator('email', mode='before')
+    def normalize_email(cls, v):
+        if isinstance(v, str):
+            s = v.strip()
+            parts = s.split('@')
+            if len(parts) == 2:
+                s = parts[0] + '@' + parts[1].lower()
+            return s
+        return v
 
 
 class UserLogin(BaseModel):
