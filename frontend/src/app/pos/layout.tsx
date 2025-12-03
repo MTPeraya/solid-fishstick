@@ -58,13 +58,13 @@ export default function PosLayout({ children }: { children: React.ReactNode }) {
           </button>
           {sidebarOpen && (
             <div className="mt-12 p-4 space-y-3">
-              <Link href="/manager/dashboard" className="font-semibold hover:text-black text-gray-700">Dashboard</Link>
-              <ul className="text-sm space-y-2">
+              <Link href="/manager/dashboard" className="text-lg font-semibold hover:text-black text-gray-700">Dashboard</Link>
+              <ul className="space-y-2">
                 {items.map((item) => (
                   <li key={item.key}>
                     <Link
                       href={item.href}
-                      className={`${pathname === item.href ? 'text-black font-medium' : 'text-gray-600'} hover:text-black`}
+                      className={`text-lg ${pathname === item.href ? 'text-black font-medium' : 'text-gray-600'} hover:text-black`}
                     >
                       {item.label}
                     </Link>
@@ -80,7 +80,7 @@ export default function PosLayout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold">{title}</h1>
           <div className="flex items-center gap-3">
-            <div className="text-sm">{user.name || user.username}</div>
+            <div className="text-lg font-medium">{user.name || user.username}</div>
             <button
               className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-black text-white hover:bg-gray-900"
               onClick={() => { signout(); router.push('/') }}
