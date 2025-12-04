@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
 
-type Product = { product_id: number; barcode: string; name: string; brand?: string | null; category?: string | null; selling_price: number | string; stock_quantity: number }
+type Product = { product_id: number; barcode: string; name: string; brand?: string | null; category?: string | null; selling_price: string | number; stock_quantity: number }
 type CartItem = { product: Product; quantity: number }
 
 export default function PosPage() {
