@@ -2,8 +2,8 @@ import { API_BASE_URL } from '../config/env'
 
 async function request(path: string, options?: RequestInit) {
   const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...(options || {}),
     headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
-    ...options,
   })
   if (!res.ok) {
     let data: any = null
