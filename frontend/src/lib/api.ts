@@ -1,10 +1,15 @@
 import { API_BASE_URL } from '../config/env'
 
 async function request(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...(options || {}),
-    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
-  })
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...(options || {}),
+      headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+    })
+  } catch (e: any) {
+    throw new Error('Network error: cannot reach API server')
+  }
   if (!res.ok) {
     let data: any = null
     try { data = await res.json() } catch {}
