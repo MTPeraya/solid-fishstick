@@ -21,10 +21,17 @@ async function request(path: string, options?: RequestInit) {
     }
     throw new Error(await res.text())
   }
+  // No content response (e.g., 204 No Content for DELETE)
+  if (res.status === 204) {
+    return null
+  }
   return res.json()
 }
 
 export const api = {
   get: (path: string, options?: RequestInit) => request(path, options),
   post: (path: string, body: unknown, options?: RequestInit) => request(path, { method: 'POST', body: JSON.stringify(body), ...(options || {}) }),
+  put: (path: string, body: unknown, options?: RequestInit) => request(path, { method: 'PUT', body: JSON.stringify(body), ...(options || {}) }),
+  patch: (path: string, body: unknown, options?: RequestInit) => request(path, { method: 'PATCH', body: JSON.stringify(body), ...(options || {}) }),
+  delete: (path: string, options?: RequestInit) => request(path, { method: 'DELETE', ...(options || {}) }),
 }

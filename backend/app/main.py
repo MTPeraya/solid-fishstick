@@ -5,6 +5,7 @@ from .db import engine, get_session
 from .config.settings import settings
 from .middleware.auth_middleware import AuthMiddleware
 from .routes.users import router as users_router
+from .routes.products import router as products_router # [NEW] Import products router
 
 
 pass
@@ -26,9 +27,8 @@ app.add_middleware(
 app.add_middleware(AuthMiddleware)
 
 
-
-
 app.include_router(users_router)
+app.include_router(products_router) # [NEW] Include products router
 
 
 @app.on_event("startup")
