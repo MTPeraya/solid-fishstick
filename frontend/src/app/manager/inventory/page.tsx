@@ -1,10 +1,28 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { api } from "../../../lib/api"
 import { useAuth } from "../../../hooks/useAuth"
 
 type Product = { product_id: number; name: string; barcode: string; brand?: string | null; category?: string | null; selling_price: string | number; stock_quantity: number; min_stock: number }
+
+// Custom sorting function:
+// 1. Low stock items (stock_quantity < min_stock) come first.
+// 2. Then sort by difference (current stock - min threshold) ascending.
+function sortInventory(a: Product, b: Product): number {
+    const isLowA = a.stock_quantity < a.min_stock
+    const isLowB = b.stock_quantity < b.min_stock
+    
+    // Low stock items come first
+    if (isLowA && !isLowB) return -1; // A is low, B is OK, A comes first
+    if (!isLowA && isLowB) return 1;  // A is OK, B is low, B comes first
+
+    // If they have the same low/ok status, sort by difference (current stock - min threshold) ascending
+    const diffA = a.stock_quantity - a.min_stock
+    const diffB = b.stock_quantity - b.min_stock
+    
+    return diffA - diffB
+}
 
 export default function ManagerInventoryPage() {
   const { token } = useAuth()
@@ -48,6 +66,13 @@ export default function ManagerInventoryPage() {
     return () => clearTimeout(t)
   }, [q, load])
 
+  // Apply the custom sorting logic to the fetched items
+  const sortedItems = useMemo(() => {
+    if (items.length === 0) return items
+    return [...items].sort(sortInventory)
+  }, [items])
+
+
   function startEditStock(p: Product) {
     setEditStockId(p.product_id)
     setNewStock(p.stock_quantity)
@@ -72,6 +97,7 @@ export default function ManagerInventoryPage() {
 
     try {
       const payload = { stock_quantity: newStock }
+      // Note: Backend endpoint is PATCH /api/products/{product_id}
       await api.post(`/api/products/${id}`, payload, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
@@ -119,7 +145,8 @@ export default function ManagerInventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((p, index) => {
+              {/* Use sortedItems here */}
+              {sortedItems.map((p, index) => {
                 const low = p.stock_quantity < p.min_stock
                 const isEditing = p.product_id === editStockId
                 return (
