@@ -31,3 +31,22 @@ def list_users(session: Session = Depends(get_session), current_user: User = Dep
     if current_user.role != "manager":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return list_users_handler(session)
+
+@router.get("/employees", response_model=list[UserRead])
+def list_employees(
+    role: str | None = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != "manager":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
+
+    users = list_users_handler(session)
+
+    if role in ["manager", "cashier"]:
+        users = [u for u in users if u.role == role]
+
+    # sort: manager → cashier
+    users.sort(key=lambda u: 0 if u.role == "manager" else 1)
+
+    return users

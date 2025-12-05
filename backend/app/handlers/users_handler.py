@@ -6,6 +6,8 @@ from fastapi import HTTPException, status
 from ..models.user import User
 from ..schemas.user_schema import UserCreate, UserLogin, UserRead, Token
 from ..utils.jwt import create_access_token
+from sqlalchemy.orm import Session
+#from ..models.user import User
 
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -51,3 +53,11 @@ def to_user_read(user: User) -> UserRead:
 def list_users(session: Session) -> List[UserRead]:
     users = session.exec(select(User)).all()
     return [to_user_read(u) for u in users]
+
+def list_employees(session: Session, role: str | None = None):
+    query = session.query(User)
+
+    if role in ["manager", "cashier"]:
+        query = query.filter(User.role == role)
+
+    return query.all()
