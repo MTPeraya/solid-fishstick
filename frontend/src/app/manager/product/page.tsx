@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { api } from '../../../lib/api'
 import { useAuth } from '../../../hooks/useAuth'
 
@@ -9,6 +9,24 @@ type Product = { product_id: number; barcode: string; name: string; brand?: stri
 
 // Editable type explicitly excludes fields that should be managed elsewhere
 type EditableProduct = Omit<Product, 'product_id' | 'barcode' | 'stock_quantity' | 'min_stock'> & { barcode: string }
+
+// Custom sorting function:
+// 1. Low stock items (stock_quantity < min_stock) come first.
+// 2. Then sort by difference (current stock - min threshold) ascending.
+function sortInventory(a: Product, b: Product): number {
+    const isLowA = a.stock_quantity < a.min_stock
+    const isLowB = b.stock_quantity < b.min_stock
+    
+    // Low stock items come first
+    if (isLowA && !isLowB) return -1; 
+    if (!isLowA && isLowB) return 1;  
+
+    // If they have the same low/ok status, sort by difference (current stock - min threshold) ascending
+    const diffA = a.stock_quantity - a.min_stock
+    const diffB = b.stock_quantity - b.min_stock
+    
+    return diffA - diffB
+}
 
 export default function ManagerProductPage() {
   const { token, user } = useAuth()
@@ -62,6 +80,12 @@ export default function ManagerProductPage() {
     return () => clearTimeout(t)
   }, [token, q])
 
+  // Apply the custom sorting logic to the fetched items
+  const sortedItems = useMemo(() => {
+    if (items.length === 0) return items
+    return [...items].sort(sortInventory)
+  }, [items])
+
 
   async function addProduct(e: React.FormEvent) {
     e.preventDefault()
@@ -92,6 +116,7 @@ export default function ManagerProductPage() {
     setErr(null)
     setOkMsg(null)
     try {
+      // Note: Backend endpoint is DELETE /api/products/{product_id}
       await api.post(`/api/products/${id}`, {}, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
       setOkMsg(`Product ID ${id} deleted successfully.`)
       await load()
@@ -154,6 +179,7 @@ export default function ManagerProductPage() {
     }
 
     try {
+      // Note: Backend endpoint is PATCH /api/products/{product_id}
       await api.post(`/api/products/${id}`, payload, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
@@ -217,7 +243,8 @@ export default function ManagerProductPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((p, index) => {
+              {/* Use sortedItems here */}
+              {sortedItems.map((p, index) => {
                 const isEditing = p.product_id === editId
                 return (
                   <tr key={p.product_id} className="border-t">
