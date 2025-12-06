@@ -74,9 +74,14 @@ def seed(reset: bool = False) -> dict:
         get_or_create_tier(session, "Silver", Decimal("1000.00"), Decimal("5000.00"), Decimal("5.00"), "Priority support")
         get_or_create_tier(session, "Gold", Decimal("5000.00"), None, Decimal("10.00"), "Premium benefits")
 
-        manager = get_or_create_user(session, "manager@example.com", "manager", "Manager", "manager", "secret12")
-        cashier = get_or_create_user(session, "cashier@example.com", "cashier", "Cashier", "cashier", "secret12")
-        out["users"] = [manager.uid, cashier.uid]
+        user_uids: list[str] = []
+        for i in range(1, 3):
+            u = get_or_create_user(session, f"manager{i}@example.com", f"manager{i}", f"Manager {i}", "manager", "secret12")
+            user_uids.append(u.uid)
+        for i in range(1, 9):
+            u = get_or_create_user(session, f"cashier{i}@example.com", f"cashier{i}", f"Cashier {i}", "cashier", "secret12")
+            user_uids.append(u.uid)
+        out["users"] = user_uids
 
         products_data = [
             ("0000000000001", "Drinking Water", "Acme", "Drinks", Decimal("8.00"), Decimal("12.00"), 200, 10),
@@ -104,7 +109,9 @@ if __name__ == "__main__":
     parser.add_argument("--reset", action="store_true", help="Drop and recreate all tables, then seed full dataset")
     parser.add_argument("--products-only", action="store_true", help="Seed only products (no users/members/tiers)")
     parser.add_argument("--reset-products", action="store_true", help="Delete all existing products before seeding")
-    parser.add_argument("--count", type=int, default=40, help="Number of products to seed for products-only mode")
+    parser.add_argument("--users-only", action="store_true", help="Seed only users")
+    parser.add_argument("--reset-users", action="store_true", help="Delete all existing users before seeding users-only")
+    parser.add_argument("--count", type=int, default=40, help="Number to seed for products/users-only mode")
     args = parser.parse_args()
 
     def delete_all_products(session: Session):
@@ -177,8 +184,34 @@ if __name__ == "__main__":
         out["products"] = product_ids
         return out
 
+    def delete_all_users(session: Session):
+        items = session.exec(select(User)).all()
+        for it in items:
+            session.delete(it)
+        session.commit()
+
+    def seed_users_only(count: int = 10, reset_users: bool = False) -> dict:
+        SQLModel.metadata.create_all(engine)
+        out: dict = {}
+        with Session(engine) as session:
+            if reset_users:
+                delete_all_users(session)
+            uids: list[str] = []
+            mcount = min(2, max(0, count))
+            ccount = max(0, count - mcount)
+            for i in range(1, mcount + 1):
+                u = get_or_create_user(session, f"manager{i}@example.com", f"manager{i}", f"Manager {i}", "manager", "secret12")
+                uids.append(u.uid)
+            for i in range(1, ccount + 1):
+                u = get_or_create_user(session, f"cashier{i}@example.com", f"cashier{i}", f"Cashier {i}", "cashier", "secret12")
+                uids.append(u.uid)
+            out["users"] = uids
+        return out
+
     if args.products_only:
         result = seed_products_only(count=args.count, reset_products=args.reset_products)
+    elif args.users_only:
+        result = seed_users_only(count=args.count, reset_users=args.reset_users)
     else:
         result = seed(reset=args.reset)
     print(json.dumps(result))
