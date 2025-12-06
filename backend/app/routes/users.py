@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 from ..db import get_session
 from ..schemas.user_schema import UserCreate, UserLogin, UserRead, Token
-from ..handlers.users_handler import signup as signup_handler, signin as signin_handler, to_user_read, list_users as list_users_handler
+from ..handlers.users_handler import signup as signup_handler, signin as signin_handler, to_user_read, list_users as list_users_handler, list_employees as list_employees_handler
 from ..utils.jwt import get_current_user
 from ..models.user import User
 from typing import List
@@ -39,14 +39,5 @@ def list_employees(
     current_user: User = Depends(get_current_user)
 ):
     if current_user.role != "manager":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
-
-    users = list_users_handler(session)
-
-    if role in ["manager", "cashier"]:
-        users = [u for u in users if u.role == role]
-
-    # sort: manager → cashier
-    users.sort(key=lambda u: 0 if u.role == "manager" else 1)
-
-    return users
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return list_employees_handler(session, role)
