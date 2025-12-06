@@ -112,6 +112,8 @@ if __name__ == "__main__":
     parser.add_argument("--users-only", action="store_true", help="Seed only users")
     parser.add_argument("--reset-users", action="store_true", help="Delete all existing users before seeding users-only")
     parser.add_argument("--count", type=int, default=40, help="Number to seed for products/users-only mode")
+    parser.add_argument("--managers", type=int, default=None, help="Number of managers to seed in users-only mode")
+    parser.add_argument("--cashiers", type=int, default=None, help="Number of cashiers to seed in users-only mode")
     args = parser.parse_args()
 
     def delete_all_products(session: Session):
@@ -190,15 +192,20 @@ if __name__ == "__main__":
             session.delete(it)
         session.commit()
 
-    def seed_users_only(count: int = 10, reset_users: bool = False) -> dict:
+    def seed_users_only(count: int | None = None, reset_users: bool = False, managers: int | None = None, cashiers: int | None = None) -> dict:
         SQLModel.metadata.create_all(engine)
         out: dict = {}
         with Session(engine) as session:
             if reset_users:
                 delete_all_users(session)
             uids: list[str] = []
-            mcount = min(2, max(0, count))
-            ccount = max(0, count - mcount)
+            if managers is not None or cashiers is not None:
+                mcount = max(0, managers or 0)
+                ccount = max(0, cashiers or 0)
+            else:
+                total = count if count is not None else 10
+                mcount = min(2, max(0, total))
+                ccount = max(0, total - mcount)
             for i in range(1, mcount + 1):
                 u = get_or_create_user(session, f"manager{i}@example.com", f"manager{i}", f"Manager {i}", "manager", "secret12")
                 uids.append(u.uid)
@@ -211,7 +218,7 @@ if __name__ == "__main__":
     if args.products_only:
         result = seed_products_only(count=args.count, reset_products=args.reset_products)
     elif args.users_only:
-        result = seed_users_only(count=args.count, reset_users=args.reset_users)
+        result = seed_users_only(count=args.count, reset_users=args.reset_users, managers=args.managers, cashiers=args.cashiers)
     else:
         result = seed(reset=args.reset)
     print(json.dumps(result))
