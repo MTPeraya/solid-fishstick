@@ -51,3 +51,12 @@ def to_user_read(user: User) -> UserRead:
 def list_users(session: Session) -> List[UserRead]:
     users = session.exec(select(User)).all()
     return [to_user_read(u) for u in users]
+
+def list_employees(session: Session, role: str | None = None) -> List[UserRead]:
+    stmt = select(User)
+    if role in ("manager", "cashier"):
+        stmt = stmt.where(User.role == role)
+    users = session.exec(stmt).all()
+    result = [to_user_read(u) for u in users]
+    result.sort(key=lambda u: 0 if u.role == "manager" else 1)
+    return result
