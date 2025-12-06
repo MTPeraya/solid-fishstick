@@ -6,7 +6,6 @@ from ..utils.jwt import decode_access_token
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable):
 
-        # 🔥 Allow CORS preflight (OPTIONS) to bypass authentication
         if request.method == "OPTIONS":
             return await call_next(request)
 
