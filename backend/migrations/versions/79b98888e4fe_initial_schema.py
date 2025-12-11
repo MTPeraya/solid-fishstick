@@ -8,6 +8,7 @@ Create Date: 2025-12-11 16:14:01.978376
 
 from alembic import op
 import sqlalchemy as sa
+import sqlmodel
 
 
 revision = '79b98888e4fe'
