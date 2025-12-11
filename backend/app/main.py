@@ -7,6 +7,7 @@ from .middleware.auth_middleware import AuthMiddleware
 from .routes.users import router as users_router
 from .routes.products import router as products_router
 from .routes.transactions import router as transactions_router
+from .routes.promotions import router as promotions_router
 from .models import product as _product_model
 from .models import promotion as _promotion_model
 from .models import membership_tier as _membership_tier_model
@@ -35,13 +36,13 @@ app.add_middleware(
 app.add_middleware(AuthMiddleware)
 
 
-
-
 app.include_router(users_router)
 app.include_router(products_router)
 app.include_router(transactions_router)
+app.include_router(promotions_router) 
 
 
 @app.on_event("startup")
 def on_startup():
     SQLModel.metadata.create_all(engine)
+    

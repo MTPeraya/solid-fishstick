@@ -4,24 +4,40 @@ import { useEffect, useState, useMemo } from 'react'
 import { api } from '../../../lib/api'
 import { useAuth } from '../../../hooks/useAuth'
 
-// Product type including all fields, though some are hidden in the table view
-type Product = { product_id: number; barcode: string; name: string; brand?: string | null; category?: string | null; cost_price: string | number; selling_price: string | number; stock_quantity: number; min_stock: number }
+// --- New Types ---
+type Promotion = {
+  promotion_id: number
+  promotion_name: string
+  discount_type: string
+  discount_value: string | number
+  is_active: boolean
+}
 
-// Editable type explicitly excludes fields that should be managed elsewhere
+// Product type including promotion_id
+type Product = { 
+  product_id: number; 
+  barcode: string; 
+  name: string; 
+  brand?: string | null; 
+  category?: string | null; 
+  cost_price: string | number; 
+  selling_price: string | number; 
+  stock_quantity: number; 
+  min_stock: number;
+  promotion_id?: number | null;
+}
+
+// Editable type
 type EditableProduct = Omit<Product, 'product_id' | 'barcode' | 'stock_quantity' | 'min_stock'> & { barcode: string }
 
-// Custom sorting function:
-// 1. Low stock items (stock_quantity < min_stock) come first.
-// 2. Then sort by difference (current stock - min threshold) ascending.
+// Custom sorting function
 function sortInventory(a: Product, b: Product): number {
     const isLowA = a.stock_quantity < a.min_stock
     const isLowB = b.stock_quantity < b.min_stock
     
-    // Low stock items come first
-    if (isLowA && !isLowB) return -1; 
-    if (!isLowA && isLowB) return 1;  
-
-    // If they have the same low/ok status, sort by difference (current stock - min threshold) ascending
+    if (isLowA && !isLowB) return -1;
+    if (!isLowA && isLowB) return 1;
+    
     const diffA = a.stock_quantity - a.min_stock
     const diffB = b.stock_quantity - b.min_stock
     
@@ -31,6 +47,7 @@ function sortInventory(a: Product, b: Product): number {
 export default function ManagerProductPage() {
   const { token, user } = useAuth()
   const [items, setItems] = useState<Product[]>([])
+  const [promotions, setPromotions] = useState<Promotion[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
@@ -50,23 +67,27 @@ export default function ManagerProductPage() {
 
   // State for editing
   const [editId, setEditId] = useState<number | null>(null)
-  const [editData, setEditData] = useState<Partial<EditableProduct>>({})
+  // Note: editData.promotion_id stores the string 'null' when selected via dropdown.
+  const [editData, setEditData] = useState<Partial<EditableProduct & { promotion_id?: number | null | string}>>({}) 
   const [savingId, setSavingId] = useState<number | null>(null)
 
   async function load() {
-    if (!token) return // Don't try to load if not authenticated
+    if (!token) return
 
     setLoading(true)
     setErr(null)
     setOkMsg(null)
     try {
       const path = q.trim() ? `/api/products?q=${encodeURIComponent(q.trim())}` : "/api/products"
-      // Note: Although the backend list_products endpoint doesn't require auth, 
-      // the manager pages do, so we include the token for consistency across the page lifecycle.
       const data = await api.get(path) 
       setItems(data as Product[])
+      
+      // Fetch Promotions
+      const promoData = await api.get('/api/promotions', { headers: { Authorization: `Bearer ${token}` } })
+      setPromotions((promoData as Promotion[]).filter(p => p.is_active));
+
     } catch (e: any) {
-      setErr(e?.message || 'Failed to load products')
+      setErr(e?.message || 'Failed to load data')
     } finally {
       setLoading(false)
     }
@@ -74,13 +95,11 @@ export default function ManagerProductPage() {
 
   useEffect(() => { 
     const t = setTimeout(() => {
-        // Debounced load when search query or token changes
         if (token) load()
     }, 250)
     return () => clearTimeout(t)
   }, [token, q])
 
-  // Apply the custom sorting logic to the fetched items
   const sortedItems = useMemo(() => {
     if (items.length === 0) return items
     return [...items].sort(sortInventory)
@@ -102,6 +121,7 @@ export default function ManagerProductPage() {
         selling_price: Number(sellingPrice),
         stock_quantity: Number(stockQty),
         min_stock: Number(minStock),
+        promotion_id: null,
       }, { headers: { Authorization: `Bearer ${token}` } })
       setOkMsg(`Product "${name.trim()}" added successfully.`)
       setBarcode(''); setName(''); setBrand(''); setCategory(''); setCostPrice(''); setSellingPrice(''); setStockQty(0); setMinStock(10)
@@ -116,7 +136,6 @@ export default function ManagerProductPage() {
     setErr(null)
     setOkMsg(null)
     try {
-      // Note: Backend endpoint is DELETE /api/products/{product_id}
       await api.post(`/api/products/${id}`, {}, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
       setOkMsg(`Product ID ${id} deleted successfully.`)
       await load()
@@ -133,7 +152,7 @@ export default function ManagerProductPage() {
       category: p.category || '',
       cost_price: String(p.cost_price),
       selling_price: String(p.selling_price),
-      // Stock fields are intentionally omitted from edit data on the Product page
+      promotion_id: p.promotion_id, // Set initial value as number | null
     })
     setErr(null)
     setOkMsg(null)
@@ -144,7 +163,7 @@ export default function ManagerProductPage() {
     setEditData({})
   }
 
-  function handleEditChange(key: keyof EditableProduct, value: string | number) {
+  function handleEditChange(key: keyof EditableProduct | 'promotion_id', value: string | number | boolean | null) {
     setEditData(prev => ({ ...prev, [key]: value }))
   }
 
@@ -164,6 +183,17 @@ export default function ManagerProductPage() {
              payload[key] = (value as string).trim()
         } else if (key === 'brand' || key === 'category') {
             payload[key] = (value as string).trim() || null
+        } else if (key === 'promotion_id') {
+             // 🟢 FIX: Explicitly check for string 'null' and primitive null
+             if (value === 'null' || value === null) {
+                payload[key] = null; // Send null to backend to un-assign promotion
+             } else if (typeof value === 'string') {
+                 // If it's a numeric string (promotion ID), convert to number
+                 payload[key] = Number(value);
+             } else {
+                 // Fallback for number type if somehow it got stored as number
+                 payload[key] = value;
+             }
         }
     }
     
@@ -179,7 +209,6 @@ export default function ManagerProductPage() {
     }
 
     try {
-      // Note: Backend endpoint is PATCH /api/products/{product_id}
       await api.post(`/api/products/${id}`, payload, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
@@ -195,6 +224,15 @@ export default function ManagerProductPage() {
     }
   }
 
+  // Helper to find promotion name
+  const getPromoName = (id: number | null | undefined): string => {
+    if (!id) return 'None';
+    const promo = promotions.find(p => p.promotion_id === id);
+    if (!promo) return `ID ${id} (Inactive/Deleted)`;
+    return `${promo.promotion_name} (${promo.discount_type === 'PERCENTAGE' ? `${Number(promo.discount_value).toFixed(0)}%` : `฿${Number(promo.discount_value).toFixed(2)}`})`;
+  }
+
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -207,7 +245,7 @@ export default function ManagerProductPage() {
 
       <form className="border rounded p-4 space-y-3 bg-gray-50" onSubmit={addProduct}>
         <h3 className="text-base font-medium">Add New Product</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <input className="border rounded px-3 py-2" placeholder="Barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} required disabled={editId !== null} />
           <input className="border rounded px-3 py-2" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required disabled={editId !== null} />
           <input className="border rounded px-3 py-2" placeholder="Brand" value={brand} onChange={(e) => setBrand(e.target.value)} disabled={editId !== null} />
@@ -237,13 +275,12 @@ export default function ManagerProductPage() {
                 <th className="py-2">Name</th>
                 <th className="py-2">Brand</th>
                 <th className="py-2">Category</th>
-                <th className="py-2">Cost Price</th>
                 <th className="py-2">Selling Price</th>
+                <th className="py-2">Promotion</th>
                 <th className="py-2">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {/* Use sortedItems here */}
               {sortedItems.map((p, index) => {
                 const isEditing = p.product_id === editId
                 return (
@@ -291,21 +328,7 @@ export default function ManagerProductPage() {
                           type="number"
                           step="0.01"
                           min="0.00"
-                          value={editData.cost_price || ''}
-                          onChange={(e) => handleEditChange('cost_price', e.target.value)}
-                          required
-                        />
-                      ) : (
-                        `฿${Number(p.cost_price).toFixed(2)}`
-                      )}
-                    </td>
-                    <td className="py-2">
-                      {isEditing ? (
-                        <input
-                          className="border rounded px-2 py-1 w-full"
-                          type="number"
-                          step="0.01"
-                          min="0.00"
+                          // Use cost_price for the validation check only, display selling price
                           value={editData.selling_price || ''}
                           onChange={(e) => handleEditChange('selling_price', e.target.value)}
                           required
@@ -313,6 +336,25 @@ export default function ManagerProductPage() {
                       ) : (
                         `฿${Number(p.selling_price).toFixed(2)}`
                       )}
+                    </td>
+                    <td className="py-2">
+                        {isEditing ? (
+                            <select
+                                className="border rounded px-2 py-1 w-full"
+                                // Ensure the value binding is correct for null. We bind the string 'null' for the option value.
+                                value={editData.promotion_id === null ? 'null' : String(editData.promotion_id ?? p.promotion_id ?? 'null')}
+                                onChange={(e) => handleEditChange('promotion_id', e.target.value)} // Value is the string 'null' or a number string
+                            >
+                                <option value="null">-- No Promotion --</option>
+                                {promotions.map(promo => (
+                                    <option key={promo.promotion_id} value={promo.promotion_id}>
+                                        {getPromoName(promo.promotion_id)}
+                                    </option>
+                                ))}
+                            </select>
+                        ) : (
+                           <span className="text-xs">{getPromoName(p.promotion_id)}</span>
+                        )}
                     </td>
                     <td className="py-2 flex items-center gap-2">
                       {isEditing ? (

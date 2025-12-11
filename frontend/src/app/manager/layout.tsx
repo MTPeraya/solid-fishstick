@@ -28,8 +28,9 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
   const items = [
     { key: 'sales', label: 'Sales', href: '/manager/sales' },
     { key: 'inventory', label: 'Inventory', href: '/manager/inventory' },
-    { key: 'employee', label: 'Employee', href: '/manager/employee' },
     { key: 'product', label: 'Product', href: '/manager/product' },
+    { key: 'promotion', label: 'Promotions', href: '/manager/promotion' }, // 🟢 ADDED
+    { key: 'employee', label: 'Employee', href: '/manager/employee' },
   ]
 
   const title = (
@@ -39,6 +40,7 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
       '/manager/inventory': 'Inventory',
       '/manager/employee': 'Employee',
       '/manager/product': 'Product',
+      '/manager/promotion': 'Promotions', // 🟢 ADDED
     } as Record<string, string>
   )[pathname] || 'Manager'
 

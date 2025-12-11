@@ -1,10 +1,20 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { api } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
 
-type Product = { product_id: number; barcode: string; name: string; brand?: string | null; category?: string | null; selling_price: string | number; stock_quantity: number }
+// --- New Types ---
+type Promotion = {
+  promotion_id: number
+  promotion_name: string
+  discount_type: 'PERCENTAGE' | 'FIXED'
+  discount_value: string | number
+  is_active: boolean
+}
+
+// Product type updated to include promotion_id
+type Product = { product_id: number; barcode: string; name: string; brand?: string | null; category?: string | null; selling_price: string | number; stock_quantity: number; promotion_id?: number | null }
 type CartItem = { product: Product; quantity: number }
 
 export default function PosPage() {
@@ -18,6 +28,26 @@ export default function PosPage() {
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
+  const [promotions, setPromotions] = useState<Promotion[]>([])
+
+  const fetchPromotions = useCallback(async () => {
+    if (!token) return
+    try {
+        // Only fetch promotions if logged in (token exists)
+        const promoData = await api.get('/api/promotions', { headers: { Authorization: `Bearer ${token}` } })
+        // Filter to only include currently active promotions
+        const activePromos = (promoData as Promotion[]).filter(p => p.is_active && new Date(p.end_date) >= new Date())
+        setPromotions(activePromos);
+    } catch (e) {
+        console.error("Failed to fetch promotions:", e)
+        // This is not a critical error for POS function, so we don't display it to the cashier
+    }
+  }, [token])
+
+  useEffect(() => {
+      fetchPromotions()
+  }, [fetchPromotions])
+
 
   useEffect(() => {
     let cancelled = false
@@ -55,15 +85,31 @@ export default function PosPage() {
       const idx = prev.findIndex((it) => it.product.product_id === p.product_id)
       if (idx >= 0) {
         const next = [...prev]
+        if (next[idx].quantity + 1 > p.stock_quantity) {
+             setErr(`Cannot add more than available stock (${p.stock_quantity}) for ${p.name}`)
+             return prev
+        }
         next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 }
         return next
       }
       return [...prev, { product: p, quantity: 1 }]
     })
+    setErr(null) 
   }
 
   function updateQty(pid: number, qty: number) {
-    setCart((prev) => prev.map((it) => it.product.product_id === pid ? { ...it, quantity: Math.max(1, qty) } : it))
+    setCart((prev) => prev.map((it) => {
+        if (it.product.product_id === pid) {
+            const newQty = Math.max(1, qty)
+            if (newQty > it.product.stock_quantity) {
+                 setErr(`Cannot exceed available stock (${it.product.stock_quantity}) for ${it.product.name}`)
+                 return it
+            }
+            return { ...it, quantity: newQty } 
+        }
+        return it
+    }))
+    setErr(null)
   }
 
   function removeItem(pid: number) {
@@ -72,11 +118,34 @@ export default function PosPage() {
 
   const subtotal = useMemo(() => cart.reduce((sum, it) => sum + Number(it.product.selling_price) * it.quantity, 0), [cart])
 
+  // 🟢 Helper to get promotion display text
+  const getPromoText = (productId?: number | null): string => {
+    const product = cart.find(item => item.product.product_id === productId)?.product;
+    const promoId = product?.promotion_id;
+    if (!promoId) return '';
+
+    // Check if the assigned promotion ID is currently active
+    const promo = promotions.find(p => p.promotion_id === promoId);
+    if (!promo) return '';
+
+    const value = Number(promo.discount_value).toFixed(0);
+    const type = promo.discount_type === 'PERCENTAGE' ? `${value}% OFF` : `฿${value} OFF`;
+
+    return `(Promo: ${type})`;
+  }
+
   async function checkout() {
     setErr(null)
     setOkMsg(null)
     if (!token) { setErr('Not signed in'); return }
     if (cart.length === 0) { setErr('Cart is empty'); return }
+    
+    const overStockItem = cart.find(item => item.quantity > item.product.stock_quantity)
+    if (overStockItem) {
+        setErr(`Quantity for ${overStockItem.product.name} exceeds available stock (${overStockItem.product.stock_quantity})`)
+        return
+    }
+
     setSubmitting(true)
     try {
       const items = cart.map((it) => ({ product_id: it.product.product_id, quantity: it.quantity }))
@@ -84,10 +153,19 @@ export default function PosPage() {
       const mid = memberId.trim()
       if (mid) body.member_id = Number(mid)
       const data = await api.post('/api/transactions', body, { headers: { Authorization: `Bearer ${token}` } })
-      setOkMsg(`Sale completed. TX# ${data.transaction_id}`)
+      
+      const finalTotal = Number(data.total_amount).toFixed(2);
+      const memberDisc = Number(data.membership_discount).toFixed(2);
+      const productDisc = Number(data.product_discount).toFixed(2);
+      const initialSubtotal = (Number(data.subtotal) + Number(data.product_discount)).toFixed(2)
+      
+      setOkMsg(`Sale completed. TX# ${data.transaction_id}. Paid: ฿${finalTotal} (Original Total: ฿${initialSubtotal}, Product Discount: ฿${productDisc}, Member Discount: ฿${memberDisc})`)
+      
       setCart([])
       setQ('')
       setResults([])
+      setMemberId('')
+      fetchPromotions() 
     } catch (e: any) {
       setErr(e?.message || 'Checkout failed')
     } finally {
@@ -111,7 +189,7 @@ export default function PosPage() {
                 {results.map((p) => (
                   <li key={p.product_id} className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium">{p.name}</div>
+                      <div className="font-medium">{p.name} <span className="text-red-500 text-xs font-normal">{getPromoText(p.product_id)}</span></div> 
                       <div className="text-xs text-gray-600">{p.brand || ''} · {p.category || ''}</div>
                       <div className="text-xs">Barcode: {p.barcode}</div>
                     </div>
@@ -135,7 +213,7 @@ export default function PosPage() {
         <div className="md:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <div className="text-lg font-medium">Cart</div>
-            <div className="text-sm">Subtotal: ฿{subtotal.toFixed(2)}</div>
+            <div className="text-sm">Est. Pre-Discount Subtotal: ฿{subtotal.toFixed(2)}</div> 
           </div>
           <div className="border rounded p-3">
             {cart.length === 0 ? (
@@ -146,7 +224,10 @@ export default function PosPage() {
                   <li key={it.product.product_id} className="flex items-center justify-between">
                     <div>
                       <div className="font-medium">{it.product.name}</div>
-                      <div className="text-xs text-gray-600">฿{Number(it.product.selling_price).toFixed(2)} · Stock {it.product.stock_quantity}</div>
+                      <div className="text-xs text-gray-600">
+                         ฿{Number(it.product.selling_price).toFixed(2)} · Stock {it.product.stock_quantity} 
+                         <span className="text-red-500 ml-1 text-xs font-normal">{getPromoText(it.product.product_id)}</span> 
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button className="px-2 py-1 rounded border" onClick={() => updateQty(it.product.product_id, it.quantity - 1)}>-</button>
