@@ -34,6 +34,8 @@ export default function PosPage() {
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberPhone, setNewMemberPhone] = useState('')
   const [creatingMember, setCreatingMember] = useState(false)
+  const [memberPhoneError, setMemberPhoneError] = useState<string | null>(null)
+  const [newMemberPhoneError, setNewMemberPhoneError] = useState<string | null>(null)
 
   const fetchPromotions = useCallback(async () => {
     if (!token) return
@@ -141,6 +143,9 @@ export default function PosPage() {
     setOkMsg(null)
     if (!token) { setErr('Not signed in'); return }
     if (cart.length === 0) { setErr('Cart is empty'); return }
+    const mp = memberPhone.trim()
+    if (mp && !/^\d{10}$/.test(mp)) { setMemberPhoneError('Phone must be 10 digits'); return }
+    setMemberPhoneError(null)
     
     const overStockItem = cart.find(item => item.quantity > item.product.stock_quantity)
     if (overStockItem) {
@@ -182,6 +187,8 @@ export default function PosPage() {
     const name = newMemberName.trim()
     const phone = newMemberPhone.trim()
     if (!name || !phone) { setErr('Name and phone required'); return }
+    if (!/^\d{10}$/.test(phone)) { setNewMemberPhoneError('Phone must be 10 digits'); return }
+    setNewMemberPhoneError(null)
     setCreatingMember(true)
     try {
       const data = await api.post('/api/members', { name, phone }, { headers: { Authorization: `Bearer ${token}` } })
@@ -268,8 +275,11 @@ export default function PosPage() {
             <div className="text-sm font-medium">Create Member</div>
             <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
               <input className="w-full border rounded px-3 py-2" type="text" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} placeholder="Full name" />
-              <input className="w-full border rounded px-3 py-2" type="text" value={newMemberPhone} onChange={(e) => setNewMemberPhone(e.target.value)} placeholder="Phone number" />
-              <button className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={createMember} disabled={creatingMember || !newMemberName.trim() || !newMemberPhone.trim()}>
+              <div>
+                <input className="w-full border rounded px-3 py-2" type="text" value={newMemberPhone} onChange={(e) => { setNewMemberPhone(e.target.value); if (e.target.value.trim() && !/^\d{10}$/.test(e.target.value.trim())) setNewMemberPhoneError('Phone must be 10 digits'); else setNewMemberPhoneError(null) }} placeholder="Phone number" />
+                {newMemberPhoneError && <div className="text-xs text-red-600 mt-1">{newMemberPhoneError}</div>}
+              </div>
+              <button className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={createMember} disabled={creatingMember || !newMemberName.trim() || !newMemberPhone.trim() || !!newMemberPhoneError}>
                 {creatingMember ? 'Creating…' : 'Create'}
               </button>
             </div>
@@ -278,7 +288,8 @@ export default function PosPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="text-sm font-medium">Member Phone (optional)</label>
-              <input className="mt-1 w-full border rounded px-3 py-2" type="text" value={memberPhone} onChange={(e) => setMemberPhone(e.target.value)} placeholder="Phone number" />
+              <input className="mt-1 w-full border rounded px-3 py-2" type="text" value={memberPhone} onChange={(e) => { setMemberPhone(e.target.value); if (e.target.value.trim() && !/^\d{10}$/.test(e.target.value.trim())) setMemberPhoneError('Phone must be 10 digits'); else setMemberPhoneError(null) }} placeholder="Phone number" />
+              {memberPhoneError && <div className="text-xs text-red-600 mt-1">{memberPhoneError}</div>}
             </div>
             <div>
               <label className="text-sm font-medium">Payment method</label>
@@ -289,7 +300,7 @@ export default function PosPage() {
               </select>
             </div>
             <div className="flex items-end">
-              <button className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={checkout} disabled={submitting || cart.length === 0}>
+              <button className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={checkout} disabled={submitting || cart.length === 0 || (!!memberPhone.trim() && !!memberPhoneError)}>
                 {submitting ? 'Processing…' : 'Checkout'}
               </button>
             </div>
