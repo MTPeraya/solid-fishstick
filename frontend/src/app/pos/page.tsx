@@ -26,7 +26,7 @@ export default function PosPage() {
   const [results, setResults] = useState<Product[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'QR Code'>('Cash')
-  const [memberId, setMemberId] = useState<string>('')
+  const [memberPhone, setMemberPhone] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
@@ -149,8 +149,8 @@ export default function PosPage() {
     try {
       const items = cart.map((it) => ({ product_id: it.product.product_id, quantity: it.quantity }))
       const body: any = { items, payment_method: paymentMethod }
-      const mid = memberId.trim()
-      if (mid) body.member_id = Number(mid)
+      const phone = memberPhone.trim()
+      if (phone) body.member_phone = phone
       const data = await api.post('/api/transactions', body, { headers: { Authorization: `Bearer ${token}` } })
       
       const finalTotal = Number(data.total_amount).toFixed(2);
@@ -163,7 +163,7 @@ export default function PosPage() {
       setCart([])
       setQ('')
       setResults([])
-      setMemberId('')
+      setMemberPhone('')
       fetchPromotions() 
     } catch (e: any) {
       setErr(e?.message || 'Checkout failed')
@@ -242,8 +242,8 @@ export default function PosPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="text-sm font-medium">Member ID (optional)</label>
-              <input className="mt-1 w-full border rounded px-3 py-2" type="text" value={memberId} onChange={(e) => setMemberId(e.target.value)} placeholder="Member ID" />
+              <label className="text-sm font-medium">Member Phone (optional)</label>
+              <input className="mt-1 w-full border rounded px-3 py-2" type="text" value={memberPhone} onChange={(e) => setMemberPhone(e.target.value)} placeholder="Phone number" />
             </div>
             <div>
               <label className="text-sm font-medium">Payment method</label>
