@@ -10,6 +10,7 @@ from .models.membership_tier import MembershipTier
 from .models.transaction import Transaction
 from .models.cashier import Cashier
 from .models.manager import Manager
+from .models.transaction_item import TransactionItem
 from .models import promotion as _promotion_model
 
 
@@ -94,9 +95,8 @@ def seed(reset: bool = False) -> dict:
                 if not session.exec(select(Cashier).where(Cashier.employee_id == uid)).first():
                     session.add(Cashier(employee_id=uid))
             if u.role == "manager":
-                import uuid as _uuid
-                if not session.exec(select(Manager).where(Manager.admin_id == _uuid.UUID(uid))).first():
-                    session.add(Manager(admin_id=_uuid.UUID(uid)))
+                if not session.exec(select(Manager).where(Manager.admin_id == uid)).first():
+                    session.add(Manager(admin_id=uid))
         session.commit()
         # Seed sample members
         members: list[int] = []
@@ -151,6 +151,8 @@ if __name__ == "__main__":
     parser.add_argument("--reset-products", action="store_true", help="Delete all existing products before seeding")
     parser.add_argument("--users-only", action="store_true", help="Seed only users")
     parser.add_argument("--reset-users", action="store_true", help="Delete all existing users before seeding users-only")
+    parser.add_argument("--members-only", action="store_true", help="Seed only membership tiers and members")
+    parser.add_argument("--reset-members", action="store_true", help="Delete all existing members and related transactions before seeding")
     parser.add_argument("--count", type=int, default=40, help="Number to seed for products/users-only mode")
     parser.add_argument("--managers", type=int, default=None, help="Number of managers to seed in users-only mode")
     parser.add_argument("--cashiers", type=int, default=None, help="Number of cashiers to seed in users-only mode")
@@ -255,10 +257,43 @@ if __name__ == "__main__":
             out["users"] = uids
         return out
 
+    def delete_all_members(session: Session):
+        txs = session.exec(select(Transaction)).all()
+        for tx in txs:
+            items = session.exec(select(TransactionItem).where(TransactionItem.transaction_id == tx.transaction_id)).all()
+            for it in items:
+                session.delete(it)
+            session.delete(tx)
+        members = session.exec(select(Member)).all()
+        for m in members:
+            session.delete(m)
+        session.commit()
+
+    def seed_members_only(count: int = 5, reset_members: bool = False) -> dict:
+        SQLModel.metadata.create_all(engine)
+        out: dict = {}
+        with Session(engine) as session:
+            if reset_members:
+                delete_all_members(session)
+            get_or_create_tier(session, "Bronze", Decimal("0.00"), Decimal("4999.99"), Decimal("3.00"), "Basic benefits")
+            get_or_create_tier(session, "Silver", Decimal("5000.00"), Decimal("19999.99"), Decimal("5.00"), "Priority support")
+            get_or_create_tier(session, "Gold", Decimal("20000.00"), Decimal("59999.99"), Decimal("8.00"), "Premium benefits")
+            get_or_create_tier(session, "Platinum", Decimal("60000.00"), None, Decimal("12.00"), "Elite benefits")
+            members: list[int] = []
+            for i in range(count):
+                name = f"Member {i+1}"
+                phone = f"081{str(i).zfill(7)}"
+                m = get_or_create_member(session, name, phone, date.today())
+                members.append(m.member_id)
+            out["members"] = members
+        return out
+
     if args.products_only:
         result = seed_products_only(count=args.count, reset_products=args.reset_products)
     elif args.users_only:
         result = seed_users_only(count=args.count, reset_users=args.reset_users, managers=args.managers, cashiers=args.cashiers)
+    elif args.members_only:
+        result = seed_members_only(count=args.count, reset_members=args.reset_members)
     else:
         result = seed(reset=args.reset)
     print(json.dumps(result))
