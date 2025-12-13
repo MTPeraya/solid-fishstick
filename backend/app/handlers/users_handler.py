@@ -2,6 +2,7 @@ from typing import List
 from sqlmodel import Session, select
 from sqlalchemy import or_
 from passlib.context import CryptContext
+import hmac
 from fastapi import HTTPException, status
 from ..models.user import User
 from ..schemas.user_schema import UserCreate, UserLogin, UserRead, Token
@@ -23,7 +24,8 @@ def signup(data: UserCreate, session: Session) -> UserRead:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already taken")
     if role == "manager":
         from ..config.settings import settings
-        if not data.manager_secret or data.manager_secret != settings.manager_signup_code:
+        # Require a non-empty configured code and use constant-time comparison
+        if not settings.manager_signup_code or not data.manager_secret or not hmac.compare_digest(str(data.manager_secret), str(settings.manager_signup_code)):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager code invalid")
     hashed = pwd_context.hash(data.password)
     user = User(email=str(data.email), hashed_password=hashed, username=data.username, name=data.name, role=role)

@@ -97,9 +97,8 @@ export default function ManagerInventoryPage() {
 
     try {
       const payload = { stock_quantity: newStock }
-      // Note: Backend endpoint is PATCH /api/products/{product_id}
-      await api.post(`/api/products/${id}`, payload, {
-        method: 'PATCH',
+      // Backend endpoint is PATCH /api/products/{product_id}
+      await api.patch(`/api/products/${id}`, payload, {
         headers: { Authorization: `Bearer ${token}` },
       })
       setOkMsg(`Stock updated successfully for Product ID ${id}.`)

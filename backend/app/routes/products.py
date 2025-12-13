@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import or_
 from ..db import get_session
 from ..models.product import Product
+from ..models.promotion import Promotion
 from ..utils.jwt import get_current_user
 from ..models.user import User
 
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/api/products", tags=["products"])
 
 @router.get("", response_model=list[Product])
 def list_products(q: str | None = Query(default=None), barcode: str | None = Query(default=None), session: Session = Depends(get_session)):
+    """List products by optional search or exact barcode match."""
     if barcode:
         prod = session.exec(select(Product).where(Product.barcode == barcode)).first()
         if not prod:
@@ -46,11 +48,16 @@ class ProductCreate(BaseModel):
 
 @router.post("", response_model=Product)
 def create_product(data: ProductCreate, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """Create a product (manager only) and enforce price constraints."""
     if current_user.role != "manager":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     existing = session.exec(select(Product).where(Product.barcode == data.barcode)).first()
     if existing:
         raise HTTPException(status_code=400, detail="Barcode already exists")
+    
+    if data.selling_price < data.cost_price:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selling price cannot be less than cost price")
+    
     p = Product(
         barcode=data.barcode,
         name=data.name,
@@ -74,17 +81,37 @@ class ProductUpdate(BaseModel):
     selling_price: Decimal | None = None
     stock_quantity: int | None = None
     min_stock: int | None = None
+    promotion_id: int | None = None
 
 
 @router.patch("/{product_id}", response_model=Product)
 def update_product(product_id: int, data: ProductUpdate, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """Update mutable product fields and validate promotion linkage."""
     if current_user.role != "manager":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     p = session.exec(select(Product).where(Product.product_id == product_id)).first()
     if not p:
         raise HTTPException(status_code=404, detail="Product not found")
-    for field, value in data.model_dump(exclude_unset=True).items():
+
+    # Handle promotion_id update separately for validation
+    data_to_update = data.model_dump(exclude_unset=True)
+    
+    if 'promotion_id' in data_to_update:
+        promo_id = data_to_update['promotion_id']
+        if promo_id is not None:
+            promo = session.exec(select(Promotion).where(Promotion.promotion_id == promo_id)).first()
+            if not promo:
+                raise HTTPException(status_code=400, detail="Promotion ID not found")
+        # Set the attribute directly, as it is valid (either None or an existing ID)
+        setattr(p, 'promotion_id', promo_id)
+        del data_to_update['promotion_id'] # Prevent re-setting in the loop
+
+    for field, value in data_to_update.items():
         setattr(p, field, value)
+    
+    if p.selling_price < p.cost_price:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selling price cannot be less than cost price")
+
     session.add(p)
     session.commit()
     session.refresh(p)
@@ -93,6 +120,7 @@ def update_product(product_id: int, data: ProductUpdate, session: Session = Depe
 
 @router.delete("/{product_id}")
 def delete_product(product_id: int, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """Delete a product (manager only)."""
     if current_user.role != "manager":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     p = session.exec(select(Product).where(Product.product_id == product_id)).first()
