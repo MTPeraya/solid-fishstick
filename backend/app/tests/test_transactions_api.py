@@ -95,3 +95,52 @@ def test_transaction_checkout_flow():
 
     rbad2 = client.post("/api/transactions", json={"items": [{"product_id": prod1, "quantity": 1}], "payment_method": "Bitcoin"}, headers={"Authorization": f"Bearer {ctoken}"})
     assert rbad2.status_code == 400
+
+
+def test_transaction_checkout_with_member_phone():
+    signup("manager2@example.com", "manager2", "Manager2", "manager", "secret12")
+    mtoken = signin("manager2@example.com", "secret12")
+    signup("cashier2@example.com", "cashier2", "Cashier2", "cashier", "secret12")
+    ctoken = signin("cashier2@example.com", "secret12")
+
+    p = {
+        "barcode": "3333333333333",
+        "name": "ProdPhone",
+        "brand": "B",
+        "category": "C",
+        "cost_price": "50.00",
+        "selling_price": "100.00",
+        "stock_quantity": 10,
+        "min_stock": 2,
+    }
+    rp = client.post("/api/products", json=p, headers={"Authorization": f"Bearer {mtoken}"})
+    assert rp.status_code == 200
+    pid = rp.json()["product_id"]
+
+    with Session(db.engine) as s:
+        t = s.exec(select(MembershipTier).where(MembershipTier.rank_name == "Bronze")).first()
+        if not t:
+            t = MembershipTier(rank_name="Bronze", min_spent=Decimal("0.00"), max_spent=None, discount_rate=Decimal("3.00"))
+            s.add(t)
+            s.commit()
+        m = Member(name="Member B", phone="0912345678", registration_date=__import__("datetime").date.today())
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        phone = m.phone
+        mid = m.member_id
+
+    payload = {
+        "items": [{"product_id": pid, "quantity": 1}],
+        "member_phone": phone,
+        "payment_method": "Cash",
+    }
+    rtx = client.post("/api/transactions", json=payload, headers={"Authorization": f"Bearer {ctoken}"})
+    assert rtx.status_code == 200
+    tx = rtx.json()
+    subtotal = Decimal("100.00")
+    discount = (subtotal * Decimal("3.00")) / Decimal("100")
+    assert Decimal(str(tx["subtotal"])) == subtotal
+    assert Decimal(str(tx["membership_discount"])) == discount
+    assert Decimal(str(tx["total_amount"])) == subtotal - discount
+    assert tx["member_id"] == mid

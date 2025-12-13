@@ -27,6 +27,7 @@ class TransactionItemInput(BaseModel):
 class TransactionCreateInput(BaseModel):
     items: List[TransactionItemInput]
     member_id: int | None = None
+    member_phone: str | None = None
     payment_method: str
 
 def calculate_product_discount(unit_price: Decimal, quantity: int, promotion: Promotion | None) -> Decimal:
@@ -120,14 +121,16 @@ def create_transaction(data: TransactionCreateInput, session: Session = Depends(
 
     # 2. Membership Discount Calculation
     membership_discount = Decimal("0.00")
-    if data.member_id is not None:
-        member = session.exec(select(Member).where(Member.member_id == data.member_id)).first()
+    # Resolve member either by explicit member_id or by provided phone number
+    if data.member_id is not None or (data.member_phone is not None and data.member_phone.strip() != ""):
+        if data.member_id is not None:
+            member = session.exec(select(Member).where(Member.member_id == data.member_id)).first()
+        else:
+            phone = data.member_phone.strip()
+            member = session.exec(select(Member).where(Member.phone == phone)).first()
         if not member:
             raise HTTPException(status_code=404, detail="Member not found")
-        
-        rate = member.discount_rate 
-        
-        # Membership discount is applied to the subtotal (after product discount)
+        rate = member.discount_rate
         membership_discount = (subtotal_after_product_discount * rate) / Decimal("100")
         membership_discount = membership_discount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -137,7 +140,7 @@ def create_transaction(data: TransactionCreateInput, session: Session = Depends(
     # Create Transaction Record
     tx = Transaction(
         employee_id=current_user.uid,
-        member_id=data.member_id,
+        member_id=(member.member_id if member is not None else None),
         subtotal=subtotal_after_product_discount, 
         product_discount=total_product_discount, 
         membership_discount=membership_discount,

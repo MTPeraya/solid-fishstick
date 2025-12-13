@@ -26,11 +26,16 @@ export default function PosPage() {
   const [results, setResults] = useState<Product[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'QR Code'>('Cash')
-  const [memberId, setMemberId] = useState<string>('')
+  const [memberPhone, setMemberPhone] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
   const [promotions, setPromotions] = useState<Promotion[]>([])
+  const [newMemberName, setNewMemberName] = useState('')
+  const [newMemberPhone, setNewMemberPhone] = useState('')
+  const [creatingMember, setCreatingMember] = useState(false)
+  const [memberPhoneError, setMemberPhoneError] = useState<string | null>(null)
+  const [newMemberPhoneError, setNewMemberPhoneError] = useState<string | null>(null)
 
   const fetchPromotions = useCallback(async () => {
     if (!token) return
@@ -138,6 +143,9 @@ export default function PosPage() {
     setOkMsg(null)
     if (!token) { setErr('Not signed in'); return }
     if (cart.length === 0) { setErr('Cart is empty'); return }
+    const mp = memberPhone.trim()
+    if (mp && !/^\d{10}$/.test(mp)) { setMemberPhoneError('Phone must be 10 digits'); return }
+    setMemberPhoneError(null)
     
     const overStockItem = cart.find(item => item.quantity > item.product.stock_quantity)
     if (overStockItem) {
@@ -149,8 +157,8 @@ export default function PosPage() {
     try {
       const items = cart.map((it) => ({ product_id: it.product.product_id, quantity: it.quantity }))
       const body: any = { items, payment_method: paymentMethod }
-      const mid = memberId.trim()
-      if (mid) body.member_id = Number(mid)
+      const phone = memberPhone.trim()
+      if (phone) body.member_phone = phone
       const data = await api.post('/api/transactions', body, { headers: { Authorization: `Bearer ${token}` } })
       
       const finalTotal = Number(data.total_amount).toFixed(2);
@@ -163,12 +171,35 @@ export default function PosPage() {
       setCart([])
       setQ('')
       setResults([])
-      setMemberId('')
+      setMemberPhone('')
       fetchPromotions() 
     } catch (e: any) {
       setErr(e?.message || 'Checkout failed')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function createMember() {
+    setErr(null)
+    setOkMsg(null)
+    if (!token) { setErr('Not signed in'); return }
+    const name = newMemberName.trim()
+    const phone = newMemberPhone.trim()
+    if (!name || !phone) { setErr('Name and phone required'); return }
+    if (!/^\d{10}$/.test(phone)) { setNewMemberPhoneError('Phone must be 10 digits'); return }
+    setNewMemberPhoneError(null)
+    setCreatingMember(true)
+    try {
+      const data = await api.post('/api/members', { name, phone }, { headers: { Authorization: `Bearer ${token}` } })
+      setOkMsg(`Member created (#${data.member_id})`)
+      setMemberPhone(data.phone)
+      setNewMemberName('')
+      setNewMemberPhone('')
+    } catch (e: any) {
+      setErr(e?.message || 'Create member failed')
+    } finally {
+      setCreatingMember(false)
     }
   }
 
@@ -240,10 +271,25 @@ export default function PosPage() {
             )}
           </div>
 
+          <div className="border rounded p-3">
+            <div className="text-sm font-medium">Create Member</div>
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <input className="w-full border rounded px-3 py-2" type="text" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} placeholder="Full name" />
+              <div>
+                <input className="w-full border rounded px-3 py-2" type="text" value={newMemberPhone} onChange={(e) => { setNewMemberPhone(e.target.value); if (e.target.value.trim() && !/^\d{10}$/.test(e.target.value.trim())) setNewMemberPhoneError('Phone must be 10 digits'); else setNewMemberPhoneError(null) }} placeholder="Phone number" />
+                {newMemberPhoneError && <div className="text-xs text-red-600 mt-1">{newMemberPhoneError}</div>}
+              </div>
+              <button className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={createMember} disabled={creatingMember || !newMemberName.trim() || !newMemberPhone.trim() || !!newMemberPhoneError}>
+                {creatingMember ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="text-sm font-medium">Member ID (optional)</label>
-              <input className="mt-1 w-full border rounded px-3 py-2" type="text" value={memberId} onChange={(e) => setMemberId(e.target.value)} placeholder="Member ID" />
+              <label className="text-sm font-medium">Member Phone (optional)</label>
+              <input className="mt-1 w-full border rounded px-3 py-2" type="text" value={memberPhone} onChange={(e) => { setMemberPhone(e.target.value); if (e.target.value.trim() && !/^\d{10}$/.test(e.target.value.trim())) setMemberPhoneError('Phone must be 10 digits'); else setMemberPhoneError(null) }} placeholder="Phone number" />
+              {memberPhoneError && <div className="text-xs text-red-600 mt-1">{memberPhoneError}</div>}
             </div>
             <div>
               <label className="text-sm font-medium">Payment method</label>
@@ -254,7 +300,7 @@ export default function PosPage() {
               </select>
             </div>
             <div className="flex items-end">
-              <button className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={checkout} disabled={submitting || cart.length === 0}>
+              <button className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={checkout} disabled={submitting || cart.length === 0 || (!!memberPhone.trim() && !!memberPhoneError)}>
                 {submitting ? 'Processing…' : 'Checkout'}
               </button>
             </div>

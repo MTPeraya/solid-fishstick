@@ -26,8 +26,10 @@ export default function PosLayout({ children }: { children: React.ReactNode }) {
   const items = [
     { key: 'sales', label: 'Sales', href: '/manager/sales' },
     { key: 'inventory', label: 'Inventory', href: '/manager/inventory' },
-    { key: 'employee', label: 'Employee', href: '/manager/employee' },
     { key: 'product', label: 'Product', href: '/manager/product' },
+    { key: 'promotion', label: 'Promotions', href: '/manager/promotion' },
+    { key: 'membership', label: 'Membership', href: '/manager/membership' },
+    { key: 'employee', label: 'Employee', href: '/manager/employee' },
   ]
 
   const title = (
@@ -38,13 +40,15 @@ export default function PosLayout({ children }: { children: React.ReactNode }) {
       '/manager/inventory': 'Inventory',
       '/manager/employee': 'Employee',
       '/manager/product': 'Product',
+      '/manager/promotion': 'Promotions',
+      '/manager/membership': 'Membership',
     } as Record<string, string>
   )[pathname] || 'POS'
 
   return (
     <div className="min-h-screen flex">
       {isManager && (
-        <aside className={`relative transition-all duration-300 ease-out ${sidebarOpen ? 'w-64' : 'w-12'} bg-white border-r`}> 
+        <aside className={`sticky top-0 h-screen shrink-0 transition-all duration-300 ease-out ${sidebarOpen ? 'w-64' : 'w-12'} bg-white border-r`}> 
           <button
             aria-label="Toggle manager sidebar"
             className="absolute top-4 left-1 p-2"
