@@ -136,7 +136,7 @@ export default function ManagerProductPage() {
     setErr(null)
     setOkMsg(null)
     try {
-      await api.post(`/api/products/${id}`, {}, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      await api.delete(`/api/products/${id}`, { headers: { Authorization: `Bearer ${token}` } })
       setOkMsg(`Product ID ${id} deleted successfully.`)
       await load()
     } catch (e: any) {
@@ -184,14 +184,11 @@ export default function ManagerProductPage() {
         } else if (key === 'brand' || key === 'category') {
             payload[key] = (value as string).trim() || null
         } else if (key === 'promotion_id') {
-             // 🟢 FIX: Explicitly check for string 'null' and primitive null
              if (value === 'null' || value === null) {
-                payload[key] = null; // Send null to backend to un-assign promotion
+                payload[key] = null;
              } else if (typeof value === 'string') {
-                 // If it's a numeric string (promotion ID), convert to number
                  payload[key] = Number(value);
              } else {
-                 // Fallback for number type if somehow it got stored as number
                  payload[key] = value;
              }
         }
@@ -209,8 +206,7 @@ export default function ManagerProductPage() {
     }
 
     try {
-      await api.post(`/api/products/${id}`, payload, {
-        method: 'PATCH',
+      await api.patch(`/api/products/${id}`, payload, {
         headers: { Authorization: `Bearer ${token}` },
       })
       setOkMsg(`Product ID ${id} updated successfully.`)

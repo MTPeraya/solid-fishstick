@@ -29,7 +29,7 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
     { key: 'sales', label: 'Sales', href: '/manager/sales' },
     { key: 'inventory', label: 'Inventory', href: '/manager/inventory' },
     { key: 'product', label: 'Product', href: '/manager/product' },
-    { key: 'promotion', label: 'Promotions', href: '/manager/promotion' }, // 🟢 ADDED
+    { key: 'promotion', label: 'Promotions', href: '/manager/promotion' },
     { key: 'employee', label: 'Employee', href: '/manager/employee' },
   ]
 
@@ -40,7 +40,7 @@ export default function ManagerLayout({ children }: { children: React.ReactNode 
       '/manager/inventory': 'Inventory',
       '/manager/employee': 'Employee',
       '/manager/product': 'Product',
-      '/manager/promotion': 'Promotions', // 🟢 ADDED
+      '/manager/promotion': 'Promotions',
     } as Record<string, string>
   )[pathname] || 'Manager'
 

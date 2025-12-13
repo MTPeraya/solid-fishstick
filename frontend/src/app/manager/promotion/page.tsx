@@ -162,8 +162,14 @@ export default function ManagerPromotionPage() {
         if (value !== originalPromo[key]) {
            payload[key] = value as boolean
         }
-      } else if (value !== (originalPromo[key] || '')) {
-        payload[key] = value as string
+      } else {
+        const k = key as keyof Promotion
+        const oldVal = originalPromo[k]
+        const oldStr = oldVal === undefined || oldVal === null ? '' : String(oldVal)
+        const newStr = value === undefined || value === null ? '' : String(value)
+        if (newStr !== oldStr) {
+          payload[key as keyof PromotionForm] = value as any
+        }
       }
     }
     
@@ -199,8 +205,7 @@ export default function ManagerPromotionPage() {
         (payload as any).discount_value = payload.discount_value.toString();
       }
 
-      await api.post(`/api/promotions/${id}`, payload, {
-        method: 'PATCH',
+      await api.patch(`/api/promotions/${id}`, payload, {
         headers: { Authorization: `Bearer ${token}` },
       })
       setOkMsg(`Promotion ID ${id} updated successfully.`)
@@ -222,7 +227,7 @@ export default function ManagerPromotionPage() {
     setErr(null)
     setOkMsg(null)
     try {
-      await api.post(`/api/promotions/${id}`, {}, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      await api.delete(`/api/promotions/${id}`, { headers: { Authorization: `Bearer ${token}` } })
       setOkMsg(`Promotion ID ${id} deleted successfully.`)
       await load()
     } catch (e: any) {
@@ -264,7 +269,7 @@ export default function ManagerPromotionPage() {
           
           <input className="border rounded px-3 py-2" placeholder="Discount Value (e.g. 20.00)" type="number" step="0.01" min="0.01" value={newPromo.discount_value} onChange={(e) => handleNewPromoChange('discount_value', e.target.value)} required disabled={editId !== null} />
           
-          <label className="flex items-center gap-2 border rounded px-3 py-2 bg-white" disabled={editId !== null}>
+          <label className="flex items-center gap-2 border rounded px-3 py-2 bg-white">
             Active:
             <input type="checkbox" checked={newPromo.is_active} onChange={(e) => handleNewPromoChange('is_active', e.target.checked)} disabled={editId !== null} />
           </label>

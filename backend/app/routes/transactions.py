@@ -71,6 +71,7 @@ def update_member_tier(member: Member, session: Session):
 
 @router.post("", response_model=Transaction)
 def create_transaction(data: TransactionCreateInput, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """Create a transaction with product and membership discounts, and update stock."""
     if current_user.role not in ("cashier", "manager"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
@@ -96,7 +97,6 @@ def create_transaction(data: TransactionCreateInput, session: Session = Depends(
         if prod.promotion_id is not None:
             promo = session.exec(select(Promotion).where(Promotion.promotion_id == prod.promotion_id)).first()
         
-        # 🟢 FIX: Use prod.selling_price directly as a Decimal.
         unit_price = prod.selling_price 
         
         # Calculate product discount
@@ -125,7 +125,6 @@ def create_transaction(data: TransactionCreateInput, session: Session = Depends(
         if not member:
             raise HTTPException(status_code=404, detail="Member not found")
         
-        # 🟢 FIX: Use member.discount_rate directly as a Decimal.
         rate = member.discount_rate 
         
         # Membership discount is applied to the subtotal (after product discount)
@@ -174,6 +173,7 @@ def create_transaction(data: TransactionCreateInput, session: Session = Depends(
 
 @router.get("", response_model=list[Transaction])
 def list_transactions(limit: int = 50, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """List recent transactions (manager and cashier)."""
     if current_user.role not in ("manager", "cashier"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     stmt = select(Transaction).order_by(Transaction.transaction_date.desc()).limit(limit)

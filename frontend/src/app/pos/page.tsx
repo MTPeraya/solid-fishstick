@@ -10,6 +10,8 @@ type Promotion = {
   promotion_name: string
   discount_type: 'PERCENTAGE' | 'FIXED'
   discount_value: string | number
+  start_date: string
+  end_date: string
   is_active: boolean
 }
 
@@ -34,10 +36,8 @@ export default function PosPage() {
     if (!token) return
     try {
         // Only fetch promotions if logged in (token exists)
-        const promoData = await api.get('/api/promotions', { headers: { Authorization: `Bearer ${token}` } })
-        // Filter to only include currently active promotions
-        const activePromos = (promoData as Promotion[]).filter(p => p.is_active && new Date(p.end_date) >= new Date())
-        setPromotions(activePromos);
+        const promoData = await api.get('/api/promotions?active_only=true', { headers: { Authorization: `Bearer ${token}` } })
+        setPromotions(promoData as Promotion[]);
     } catch (e) {
         console.error("Failed to fetch promotions:", e)
         // This is not a critical error for POS function, so we don't display it to the cashier
@@ -118,7 +118,6 @@ export default function PosPage() {
 
   const subtotal = useMemo(() => cart.reduce((sum, it) => sum + Number(it.product.selling_price) * it.quantity, 0), [cart])
 
-  // 🟢 Helper to get promotion display text
   const getPromoText = (productId?: number | null): string => {
     const product = cart.find(item => item.product.product_id === productId)?.product;
     const promoId = product?.promotion_id;

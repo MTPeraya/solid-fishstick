@@ -54,11 +54,19 @@ def create_promotion(data: PromotionCreate, session: Session = Depends(get_sessi
     return promo
 
 @router.get("", response_model=List[Promotion])
-def list_promotions(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
-    """List all promotions (Manager only)."""
-    if current_user.role != "manager":
+def list_promotions(active_only: bool = Query(default=False), session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """List promotions. Managers see all; cashiers may request active-only."""
+    if current_user.role not in ("manager", "cashier"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-    return session.exec(select(Promotion)).all()
+    stmt = select(Promotion)
+    if active_only:
+        today = date.today()
+        stmt = stmt.where(
+            Promotion.is_active == True,
+            Promotion.start_date <= today,
+            Promotion.end_date >= today,
+        )
+    return session.exec(stmt).all()
 
 @router.patch("/{promotion_id}", response_model=Promotion)
 def update_promotion(promotion_id: int, data: PromotionUpdate, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
