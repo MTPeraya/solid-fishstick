@@ -31,6 +31,9 @@ export default function PosPage() {
   const [err, setErr] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
   const [promotions, setPromotions] = useState<Promotion[]>([])
+  const [newMemberName, setNewMemberName] = useState('')
+  const [newMemberPhone, setNewMemberPhone] = useState('')
+  const [creatingMember, setCreatingMember] = useState(false)
 
   const fetchPromotions = useCallback(async () => {
     if (!token) return
@@ -172,6 +175,27 @@ export default function PosPage() {
     }
   }
 
+  async function createMember() {
+    setErr(null)
+    setOkMsg(null)
+    if (!token) { setErr('Not signed in'); return }
+    const name = newMemberName.trim()
+    const phone = newMemberPhone.trim()
+    if (!name || !phone) { setErr('Name and phone required'); return }
+    setCreatingMember(true)
+    try {
+      const data = await api.post('/api/members', { name, phone }, { headers: { Authorization: `Bearer ${token}` } })
+      setOkMsg(`Member created (#${data.member_id})`)
+      setMemberPhone(data.phone)
+      setNewMemberName('')
+      setNewMemberPhone('')
+    } catch (e: any) {
+      setErr(e?.message || 'Create member failed')
+    } finally {
+      setCreatingMember(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -238,6 +262,17 @@ export default function PosPage() {
                 ))}
               </ul>
             )}
+          </div>
+
+          <div className="border rounded p-3">
+            <div className="text-sm font-medium">Create Member</div>
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <input className="w-full border rounded px-3 py-2" type="text" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} placeholder="Full name" />
+              <input className="w-full border rounded px-3 py-2" type="text" value={newMemberPhone} onChange={(e) => setNewMemberPhone(e.target.value)} placeholder="Phone number" />
+              <button className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={createMember} disabled={creatingMember || !newMemberName.trim() || !newMemberPhone.trim()}>
+                {creatingMember ? 'Creating…' : 'Create'}
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

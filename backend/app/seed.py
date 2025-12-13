@@ -70,9 +70,10 @@ def seed(reset: bool = False) -> dict:
     ensure_schema(reset=reset)
     out: dict = {}
     with Session(engine) as session:
-        get_or_create_tier(session, "Bronze", Decimal("0.00"), Decimal("1000.00"), Decimal("3.00"), "Basic benefits")
-        get_or_create_tier(session, "Silver", Decimal("1000.00"), Decimal("5000.00"), Decimal("5.00"), "Priority support")
-        get_or_create_tier(session, "Gold", Decimal("5000.00"), None, Decimal("10.00"), "Premium benefits")
+        get_or_create_tier(session, "Bronze", Decimal("0.00"), Decimal("4999.99"), Decimal("3.00"), "Basic benefits")
+        get_or_create_tier(session, "Silver", Decimal("5000.00"), Decimal("19999.99"), Decimal("5.00"), "Priority support")
+        get_or_create_tier(session, "Gold", Decimal("20000.00"), Decimal("59999.99"), Decimal("8.00"), "Premium benefits")
+        get_or_create_tier(session, "Platinum", Decimal("60000.00"), None, Decimal("12.00"), "Elite benefits")
 
         user_uids: list[str] = []
         for i in range(1, 3):
