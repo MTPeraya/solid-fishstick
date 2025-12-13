@@ -7,6 +7,9 @@ from .models.user import User
 from .models.product import Product
 from .models.member import Member
 from .models.membership_tier import MembershipTier
+from .models.transaction import Transaction
+from .models.cashier import Cashier
+from .models.manager import Manager
 from .models import promotion as _promotion_model
 
 
@@ -83,6 +86,35 @@ def seed(reset: bool = False) -> dict:
             u = get_or_create_user(session, f"cashier{i}@example.com", f"cashier{i}", f"Cashier {i}", "cashier", "secret12")
             user_uids.append(u.uid)
         out["users"] = user_uids
+        for uid in user_uids:
+            u = session.exec(select(User).where(User.uid == uid)).first()
+            if not u:
+                continue
+            if u.role == "cashier":
+                if not session.exec(select(Cashier).where(Cashier.employee_id == uid)).first():
+                    session.add(Cashier(employee_id=uid))
+            if u.role == "manager":
+                import uuid as _uuid
+                if not session.exec(select(Manager).where(Manager.admin_id == _uuid.UUID(uid))).first():
+                    session.add(Manager(admin_id=_uuid.UUID(uid)))
+        session.commit()
+        # Seed sample members
+        members: list[int] = []
+        for i, (name, phone) in enumerate([
+            ("Alice", "0810000000"),
+            ("Bob", "0820000000"),
+            ("Charlie", "0830000000"),
+            ("Diana", "0840000000"),
+            ("Eve", "0850000000"),
+        ]):
+            m = session.exec(select(Member).where(Member.phone == phone)).first()
+            if not m:
+                m = Member(name=name, phone=phone, registration_date=date.today())
+                session.add(m)
+                session.commit()
+                session.refresh(m)
+            members.append(m.member_id)
+        out["members"] = members
 
         products_data = [
             ("0000000000001", "Drinking Water", "Acme", "Drinks", Decimal("8.00"), Decimal("12.00"), 200, 10),
@@ -99,6 +131,13 @@ def seed(reset: bool = False) -> dict:
 
         member = get_or_create_member(session, "John Doe", "0912345678", date.today())
         out["member_id"] = member.member_id
+        cashier_uid = session.exec(select(User).where(User.role == "cashier")).first().uid
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone.utc)
+        for i, mid in enumerate(members[:3]):
+            t1 = Transaction(transaction_date=now - timedelta(days=i * 30), employee_id=cashier_uid, member_id=mid, subtotal=Decimal("1500.00"), product_discount=Decimal("0.00"), membership_discount=Decimal("0.00"), total_amount=Decimal("1500.00"), payment_method="Cash")
+            session.add(t1)
+        session.commit()
 
     return out
 

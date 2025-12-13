@@ -80,3 +80,10 @@ def test_members_list_rolling_spend_and_create():
     assert d["0811111111"]["current_tier"] == "Bronze"
     assert d["0822222222"]["current_tier"] == "Silver"
 
+    # Duplicate phone should fail
+    rdup = client.post("/api/members", json={"name": "Member One Dup", "phone": "0811111111"}, headers={"Authorization": f"Bearer {ctoken}"})
+    assert rdup.status_code == 400
+
+    # Invalid phone should fail (not digits or wrong length)
+    rbad_phone = client.post("/api/members", json={"name": "Bad Phone", "phone": "08ABC"}, headers={"Authorization": f"Bearer {ctoken}"})
+    assert rbad_phone.status_code == 400
