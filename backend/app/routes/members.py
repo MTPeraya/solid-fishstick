@@ -66,7 +66,8 @@ def list_members(q: str | None = Query(default=None), session: Session = Depends
     agg_rows = session.exec(agg_stmt).all()
     spent_map: dict[int, Decimal] = {}
     for mid, s in agg_rows:
-        spent_map[int(mid)] = Decimal(str(s))
+        if mid is not None:
+            spent_map[int(mid)] = Decimal(str(s))
     tiers = session.exec(select(MembershipTier)).all()
     tiers_sorted = sorted(tiers, key=lambda t: t.min_spent)
     out: list[MemberSummary] = []
