@@ -43,22 +43,36 @@ docker compose up --build
 
 ### 3\. Seed Initial Data (Optional)
 
-Run the seeding script to populate the database.
+Run the seeding script to populate the database with realistic test data.
 
-#### Seed all data (users, members, products, tiers)
-
-This command sets up default user accounts (manager, cashier) and a small set of products.
-
+#### Seed everything at once (recommended)
 ```bash
-docker compose exec backend python -m app.seed
+docker compose exec backend python -m app.seed --all
+```
+Creates: 2 managers, 8 cashiers, 40 products, 10 members, 50 transactions
+
+#### Seed individual components
+```bash
+# Users only
+docker compose exec backend python -m app.seed --users --managers 2 --cashiers 8
+
+# Products only
+docker compose exec backend python -m app.seed --products --product-count 50
+
+# Members only
+docker compose exec backend python -m app.seed --members --member-count 10
+
+# Transactions only (requires users, products, members)
+docker compose exec backend python -m app.seed --transactions --transaction-count 100 --days-back 30
 ```
 
-#### Seed products only (e.g., to generate 40 sample products)
-
-Use this command to populate only the product table, useful for testing inventory features.
-
+#### Reset and reseed
 ```bash
-docker compose exec backend bash -lc 'PYTHONPATH=/app python3 -m app.seed --products-only --count 40'
+# Reset entire database and seed everything
+docker compose exec backend python -m app.seed --all --reset-schema
+
+# Reset specific component
+docker compose exec backend python -m app.seed --products --reset --product-count 50
 ```
 
 ### 4\. Run Frontend
@@ -84,14 +98,16 @@ The frontend will be available at `http://localhost:3000`.
 
 ### Default User Credentials
 
-If you ran the main seeding script, you can log in with these default accounts:
+After seeding, you can log in with:
 
-| Role | Identifier (Email/Username) | Password |
+| Role | Email / Username | Password |
 | :--- | :--- | :--- |
-| **Manager** | `manager@example.com` or `manager` | `secret12` |
-| **Cashier** | `cashier@example.com` or `cashier` | `secret12` |
+| **Manager** | `manager1@example.com` or `manager1` | `secret12` |
+| **Cashier** | `cashier1@example.com` or `cashier1` | `secret12` |
 
-> **Manager Signup Code**: `ef276129` (This secret code is required if a user attempts to register a new manager account via the `/signup` page).
+Additional users: `manager2`, `cashier2`, ... `cashier8`
+
+> **Manager Signup Code**: `ef276129` (Required for new manager registration via `/signup` page)
 
 -----
 
