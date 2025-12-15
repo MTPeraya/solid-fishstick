@@ -16,19 +16,38 @@ type Tx = {
   payment_method: string
 }
 
+type Employee = {
+  uid: string
+  name: string
+  username: string
+  role: "manager" | "cashier"
+}
+
 export default function ManagerSalesPage() {
   const { token } = useAuth()
   const [items, setItems] = useState<Tx[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [uidToName, setUidToName] = useState<Record<string, string>>({})
 
   async function load() {
     setLoading(true)
     setErr(null)
     try {
       if (!token) { throw new Error("Not signed in") }
-      const data = await api.get("/api/transactions", { headers: { Authorization: `Bearer ${token}` } })
-      setItems(data as Tx[])
+      const txs = await api.get("/api/transactions", { headers: { Authorization: `Bearer ${token}` } }) as Tx[]
+      const sorted = [...txs].sort((a, b) => {
+        const ta = new Date(a.transaction_date).getTime()
+        const tb = new Date(b.transaction_date).getTime()
+        return tb - ta
+      })
+      setItems(sorted)
+      try {
+        const emps = await api.get("/api/users/employees?role=cashier", { headers: { Authorization: `Bearer ${token}` } }) as Employee[]
+        const map: Record<string, string> = {}
+        for (const e of emps) map[e.uid] = e.name || e.username
+        setUidToName(map)
+      } catch {}
     } catch (e: any) {
       setErr(e?.message || "Failed to load sales")
       setItems([])
@@ -72,7 +91,7 @@ export default function ManagerSalesPage() {
                 <tr key={t.transaction_id} className="border-t">
                   <td className="p-2">{t.transaction_id}</td>
                   <td className="p-2">{new Date(t.transaction_date).toLocaleString()}</td>
-                  <td className="p-2">{t.employee_id}</td>
+                  <td className="p-2">{uidToName[t.employee_id] || t.employee_id}</td>
                   <td className="p-2">{t.member_id ?? ""}</td>
                   <td className="p-2">฿{Number(t.subtotal).toFixed(2)}</td>
                   <td className="p-2">฿{Number(t.membership_discount).toFixed(2)}</td>
