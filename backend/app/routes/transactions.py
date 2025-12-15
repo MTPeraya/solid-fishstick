@@ -181,3 +181,178 @@ def list_transactions(limit: int = 50, session: Session = Depends(get_session), 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     stmt = select(Transaction).order_by(Transaction.transaction_date.desc()).limit(limit)
     return session.exec(stmt).all()
+
+
+@router.get("/analytics/product-sales")
+def get_product_sales_analytics(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """Get product sales analytics: top selling products by quantity and revenue"""
+    if current_user.role not in ("manager",):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    
+    from sqlalchemy import func
+    
+    # Query to get product sales data
+    stmt = (
+        select(
+            Product.product_id,
+            Product.name,
+            func.sum(TransactionItem.quantity).label("total_quantity"),
+            func.sum(TransactionItem.line_total).label("total_revenue"),
+            func.count(TransactionItem.transaction_id.distinct()).label("transaction_count")
+        )
+        .join(TransactionItem, Product.product_id == TransactionItem.product_id)
+        .group_by(Product.product_id, Product.name)
+        .order_by(func.sum(TransactionItem.line_total).desc())
+    )
+    
+    results = session.exec(stmt).all()
+    
+    return [
+        {
+            "product_id": r.product_id,
+            "name": r.name,
+            "total_quantity": int(r.total_quantity),
+            "total_revenue": float(r.total_revenue),
+            "transaction_count": int(r.transaction_count)
+        }
+        for r in results
+    ]
+
+
+@router.get("/analytics/daily-sales")
+def get_daily_sales_analytics(days: int = 30, session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """Get daily sales trends for the last N days"""
+    if current_user.role not in ("manager",):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    
+    from sqlalchemy import func
+    from datetime import datetime, timedelta
+    
+    cutoff_date = datetime.now() - timedelta(days=days)
+    
+    stmt = (
+        select(
+            func.date(Transaction.transaction_date).label("date"),
+            func.count(Transaction.transaction_id).label("transaction_count"),
+            func.sum(Transaction.total_amount).label("total_sales")
+        )
+        .where(Transaction.transaction_date >= cutoff_date)
+        .group_by(func.date(Transaction.transaction_date))
+        .order_by(func.date(Transaction.transaction_date))
+    )
+    
+    results = session.exec(stmt).all()
+    
+    return [
+        {
+            "date": str(r.date),
+            "transaction_count": int(r.transaction_count),
+            "total_sales": float(r.total_sales)
+        }
+        for r in results
+    ]
+
+
+@router.get("/analytics/payment-methods")
+def get_payment_method_analytics(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """Get payment method distribution"""
+    if current_user.role not in ("manager",):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    
+    from sqlalchemy import func
+    
+    stmt = (
+        select(
+            Transaction.payment_method,
+            func.count(Transaction.transaction_id).label("count"),
+            func.sum(Transaction.total_amount).label("total_amount")
+        )
+        .group_by(Transaction.payment_method)
+        .order_by(func.sum(Transaction.total_amount).desc())
+    )
+    
+    results = session.exec(stmt).all()
+    
+    return [
+        {
+            "payment_method": r.payment_method,
+            "count": int(r.count),
+            "total_amount": float(r.total_amount)
+        }
+        for r in results
+    ]
+
+
+@router.get("/analytics/category-sales")
+def get_category_sales_analytics(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """Get category sales analytics: top selling categories by quantity and revenue"""
+    if current_user.role not in ("manager",):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    
+    from sqlalchemy import func
+    
+    # Query to get category sales data
+    stmt = (
+        select(
+            Product.category,
+            func.sum(TransactionItem.quantity).label("total_quantity"),
+            func.sum(TransactionItem.line_total).label("total_revenue"),
+            func.count(TransactionItem.transaction_id.distinct()).label("transaction_count")
+        )
+        .join(TransactionItem, Product.product_id == TransactionItem.product_id)
+        .where(Product.category.isnot(None))
+        .group_by(Product.category)
+        .order_by(func.sum(TransactionItem.line_total).desc())
+    )
+    
+    results = session.exec(stmt).all()
+    
+    return [
+        {
+            "category": r.category,
+            "total_quantity": int(r.total_quantity),
+            "total_revenue": float(r.total_revenue),
+            "transaction_count": int(r.transaction_count)
+        }
+        for r in results
+    ]
+
+
+@router.get("/analytics/profit")
+def get_profit_analytics(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """Get profit analytics: total revenue, cost, and profit"""
+    if current_user.role not in ("manager",):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    
+    from sqlalchemy import func
+    
+    # Calculate total revenue and cost from transaction items
+    stmt = (
+        select(
+            func.sum(TransactionItem.line_total).label("total_revenue"),
+            func.sum(TransactionItem.quantity * Product.cost_price).label("total_cost")
+        )
+        .join(Product, TransactionItem.product_id == Product.product_id)
+    )
+    
+    result = session.exec(stmt).first()
+    
+    if result and result.total_revenue:
+        total_revenue = float(result.total_revenue)
+        total_cost = float(result.total_cost) if result.total_cost else 0
+        total_profit = total_revenue - total_cost
+        profit_margin = (total_profit / total_revenue * 100) if total_revenue > 0 else 0
+        
+        return {
+            "total_revenue": total_revenue,
+            "total_cost": total_cost,
+            "total_profit": total_profit,
+            "profit_margin": profit_margin
+        }
+    
+    return {
+        "total_revenue": 0,
+        "total_cost": 0,
+        "total_profit": 0,
+        "profit_margin": 0
+    }

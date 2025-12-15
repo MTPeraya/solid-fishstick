@@ -58,6 +58,13 @@ export default function ManagerSalesPage() {
 
   useEffect(() => { load() }, [token])
 
+  const summary = items.reduce((acc, t) => {
+    acc.totalSales += Number(t.total_amount)
+    acc.totalPromoDisc += Number(t.product_discount)
+    acc.totalMemberDisc += Number(t.membership_discount)
+    return acc
+  }, { totalSales: 0, totalPromoDisc: 0, totalMemberDisc: 0 })
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -66,6 +73,31 @@ export default function ManagerSalesPage() {
       </div>
 
       {err && <div className="text-sm text-red-600">{err}</div>}
+      
+      {!loading && items.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-blue-50 p-4 border border-blue-200 rounded-lg">
+            <p className="text-sm font-medium text-blue-700">Total Sales</p>
+            <p className="text-2xl font-bold text-blue-900 mt-1">฿{summary.totalSales.toFixed(2)}</p>
+            <p className="text-xs text-blue-600 mt-1">{items.length} transactions</p>
+          </div>
+          <div className="bg-green-50 p-4 border border-green-200 rounded-lg">
+            <p className="text-sm font-medium text-green-700">Promo Discounts</p>
+            <p className="text-2xl font-bold text-green-900 mt-1">฿{summary.totalPromoDisc.toFixed(2)}</p>
+            <p className="text-xs text-green-600 mt-1">From promotions</p>
+          </div>
+          <div className="bg-purple-50 p-4 border border-purple-200 rounded-lg">
+            <p className="text-sm font-medium text-purple-700">Member Discounts</p>
+            <p className="text-2xl font-bold text-purple-900 mt-1">฿{summary.totalMemberDisc.toFixed(2)}</p>
+            <p className="text-xs text-purple-600 mt-1">From memberships</p>
+          </div>
+          <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg">
+            <p className="text-sm font-medium text-gray-700">Total Discounts</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">฿{(summary.totalPromoDisc + summary.totalMemberDisc).toFixed(2)}</p>
+            <p className="text-xs text-gray-600 mt-1">All discounts given</p>
+          </div>
+        </div>
+      )}
 
       <div className="border rounded overflow-auto">
         {loading ? (
@@ -75,30 +107,43 @@ export default function ManagerSalesPage() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left">
+              <tr className="text-left bg-gray-50">
                 <th className="p-2">#</th>
                 <th className="p-2">Date</th>
                 <th className="p-2">Cashier</th>
                 <th className="p-2">Member</th>
                 <th className="p-2">Subtotal</th>
-                <th className="p-2">Membership Disc</th>
+                <th className="p-2">Promo Disc</th>
+                <th className="p-2">Member Disc</th>
                 <th className="p-2">Total</th>
                 <th className="p-2">Method</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((t) => (
-                <tr key={t.transaction_id} className="border-t">
-                  <td className="p-2">{t.transaction_id}</td>
-                  <td className="p-2">{new Date(t.transaction_date).toLocaleString()}</td>
-                  <td className="p-2">{uidToName[t.employee_id] || t.employee_id}</td>
-                  <td className="p-2">{t.member_id ?? ""}</td>
-                  <td className="p-2">฿{Number(t.subtotal).toFixed(2)}</td>
-                  <td className="p-2">฿{Number(t.membership_discount).toFixed(2)}</td>
-                  <td className="p-2">฿{Number(t.total_amount).toFixed(2)}</td>
-                  <td className="p-2">{t.payment_method}</td>
-                </tr>
-              ))}
+              {items.map((t) => {
+                const productDisc = Number(t.product_discount)
+                const memberDisc = Number(t.membership_discount)
+                const hasPromoDisc = productDisc > 0
+                const hasMemberDisc = memberDisc > 0
+                
+                return (
+                  <tr key={t.transaction_id} className="border-t hover:bg-gray-50">
+                    <td className="p-2">{t.transaction_id}</td>
+                    <td className="p-2">{new Date(t.transaction_date).toLocaleString()}</td>
+                    <td className="p-2">{uidToName[t.employee_id] || t.employee_id}</td>
+                    <td className="p-2">{t.member_id ?? "-"}</td>
+                    <td className="p-2">฿{Number(t.subtotal).toFixed(2)}</td>
+                    <td className={`p-2 ${hasPromoDisc ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                      {hasPromoDisc ? `-฿${productDisc.toFixed(2)}` : '-'}
+                    </td>
+                    <td className={`p-2 ${hasMemberDisc ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                      {hasMemberDisc ? `-฿${memberDisc.toFixed(2)}` : '-'}
+                    </td>
+                    <td className="p-2 font-semibold">฿{Number(t.total_amount).toFixed(2)}</td>
+                    <td className="p-2">{t.payment_method}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
