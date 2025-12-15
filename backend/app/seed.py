@@ -132,12 +132,87 @@ def seed(reset: bool = False) -> dict:
         member = get_or_create_member(session, "John Doe", "0912345678", date.today())
         out["member_id"] = member.member_id
         cashier_uid = session.exec(select(User).where(User.role == "cashier")).first().uid
+        
+        # Create realistic transactions with items
         from datetime import datetime, timezone, timedelta
+        import random
         now = datetime.now(timezone.utc)
-        for i, mid in enumerate(members[:3]):
-            t1 = Transaction(transaction_date=now - timedelta(days=i * 30), employee_id=cashier_uid, member_id=mid, subtotal=Decimal("1500.00"), product_discount=Decimal("0.00"), membership_discount=Decimal("0.00"), total_amount=Decimal("1500.00"), payment_method="Cash")
-            session.add(t1)
-        session.commit()
+        payment_methods = ["Cash", "Card", "QR Code"]
+        
+        # Get all products for transaction items
+        all_products = session.exec(select(Product)).all()
+        
+        if all_products:
+            # Create 30 transactions with realistic items
+            for i in range(30):
+                # Random date within last 30 days
+                tx_date = now - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
+                
+                # Random member (or None for non-member transactions)
+                tx_member_id = members[i % len(members)] if i % 3 != 0 else None
+                
+                # Select 1-5 random products for this transaction
+                num_items = random.randint(1, 5)
+                selected_products = random.sample(all_products, min(num_items, len(all_products)))
+                
+                # Calculate transaction totals
+                subtotal = Decimal("0.00")
+                items_data = []
+                
+                for prod in selected_products:
+                    quantity = random.randint(1, 3)
+                    unit_price = prod.selling_price
+                    discount = Decimal("0.00")
+                    line_total = (unit_price * quantity) - discount
+                    subtotal += line_total
+                    
+                    items_data.append({
+                        "product_id": prod.product_id,
+                        "quantity": quantity,
+                        "unit_price": unit_price,
+                        "discount_amount": discount,
+                        "line_total": line_total
+                    })
+                
+                # Apply membership discount if member
+                membership_discount = Decimal("0.00")
+                if tx_member_id:
+                    mem = session.exec(select(Member).where(Member.member_id == tx_member_id)).first()
+                    if mem:
+                        membership_discount = (subtotal * mem.discount_rate / Decimal("100")).quantize(Decimal("0.01"))
+                
+                total_amount = subtotal - membership_discount
+                
+                # Create transaction
+                tx = Transaction(
+                    transaction_date=tx_date,
+                    employee_id=cashier_uid,
+                    member_id=tx_member_id,
+                    subtotal=subtotal,
+                    product_discount=Decimal("0.00"),
+                    membership_discount=membership_discount,
+                    total_amount=total_amount,
+                    payment_method=random.choice(payment_methods)
+                )
+                session.add(tx)
+                session.commit()
+                session.refresh(tx)
+                
+                # Create transaction items
+                for item_data in items_data:
+                    tx_item = TransactionItem(
+                        transaction_id=tx.transaction_id,
+                        product_id=item_data["product_id"],
+                        quantity=item_data["quantity"],
+                        unit_price=item_data["unit_price"],
+                        discount_amount=item_data["discount_amount"],
+                        line_total=item_data["line_total"]
+                    )
+                    session.add(tx_item)
+                
+                session.commit()
+        
+        out["transactions_created"] = 30
 
     return out
 
@@ -159,6 +234,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     def delete_all_products(session: Session):
+        # Delete transaction items first (foreign key constraint)
+        tx_items = session.exec(select(TransactionItem)).all()
+        for ti in tx_items:
+            session.delete(ti)
+        session.commit()
+        
+        # Then delete products
         items = session.exec(select(Product)).all()
         for it in items:
             session.delete(it)
@@ -293,8 +375,9 @@ if __name__ == "__main__":
                 session.add(Cashier(employee_id=cashier_user.uid))
                 session.commit()
 
-            # Seed transactions per member to cover all tiers in rolling-year spend
+            # Seed transactions per member with realistic items
             from datetime import datetime, timezone, timedelta
+            import random
             now = datetime.now(timezone.utc)
             tier_targets = [
                 Decimal("3000.00"),   # Bronze (0–4999.99)
@@ -303,25 +386,89 @@ if __name__ == "__main__":
                 Decimal("80000.00"),  # Platinum (60000+)
             ]
             day_offsets = [20, 60, 120, 200, 280]  # all within the last year
-            for idx, mid in enumerate(members):
-                target = tier_targets[idx % len(tier_targets)]
-                # Split target into 5 chunks to create multiple transactions
-                # Use simple proportional splits that sum to 100%
-                splits = [Decimal("0.25"), Decimal("0.20"), Decimal("0.15"), Decimal("0.20"), Decimal("0.20")]
-                for j, frac in enumerate(splits):
-                    amt = (target * frac).quantize(Decimal("0.01"))
-                    tx = Transaction(
-                        transaction_date=now - timedelta(days=day_offsets[j]),
-                        employee_id=cashier_user.uid,
-                        member_id=mid,
-                        subtotal=amt,
-                        product_discount=Decimal("0.00"),
-                        membership_discount=Decimal("0.00"),
-                        total_amount=amt,
-                        payment_method="Cash",
-                    )
-                    session.add(tx)
-            session.commit()
+            payment_methods = ["Cash", "Card", "QR Code"]
+            
+            # Get all products for transaction items
+            all_products = session.exec(select(Product)).all()
+            
+            if all_products:
+                for idx, mid in enumerate(members):
+                    target = tier_targets[idx % len(tier_targets)]
+                    # Split target into 5 chunks to create multiple transactions
+                    splits = [Decimal("0.25"), Decimal("0.20"), Decimal("0.15"), Decimal("0.20"), Decimal("0.20")]
+                    for j, frac in enumerate(splits):
+                        target_amt = (target * frac).quantize(Decimal("0.01"))
+                        
+                        # Select random products to reach target amount
+                        num_items = random.randint(2, 6)
+                        selected_products = random.sample(all_products, min(num_items, len(all_products)))
+                        
+                        subtotal = Decimal("0.00")
+                        items_data = []
+                        
+                        # Calculate items to approximately reach target
+                        for i, prod in enumerate(selected_products):
+                            if i == len(selected_products) - 1:
+                                # Last item: adjust to reach target
+                                remaining = target_amt - subtotal
+                                if remaining > 0 and prod.selling_price > 0:
+                                    quantity = max(1, int(remaining / prod.selling_price))
+                                else:
+                                    quantity = 1
+                            else:
+                                quantity = random.randint(1, 4)
+                            
+                            unit_price = prod.selling_price
+                            discount = Decimal("0.00")
+                            line_total = (unit_price * quantity) - discount
+                            subtotal += line_total
+                            
+                            items_data.append({
+                                "product_id": prod.product_id,
+                                "quantity": quantity,
+                                "unit_price": unit_price,
+                                "discount_amount": discount,
+                                "line_total": line_total
+                            })
+                        
+                        # Apply membership discount
+                        mem = session.exec(select(Member).where(Member.member_id == mid)).first()
+                        membership_discount = Decimal("0.00")
+                        if mem:
+                            membership_discount = (subtotal * mem.discount_rate / Decimal("100")).quantize(Decimal("0.01"))
+                        
+                        total_amount = subtotal - membership_discount
+                        
+                        # Create transaction
+                        tx = Transaction(
+                            transaction_date=now - timedelta(days=day_offsets[j]),
+                            employee_id=cashier_user.uid,
+                            member_id=mid,
+                            subtotal=subtotal,
+                            product_discount=Decimal("0.00"),
+                            membership_discount=membership_discount,
+                            total_amount=total_amount,
+                            payment_method=random.choice(payment_methods)
+                        )
+                        session.add(tx)
+                        session.commit()
+                        session.refresh(tx)
+                        
+                        # Create transaction items
+                        for item_data in items_data:
+                            tx_item = TransactionItem(
+                                transaction_id=tx.transaction_id,
+                                product_id=item_data["product_id"],
+                                quantity=item_data["quantity"],
+                                unit_price=item_data["unit_price"],
+                                discount_amount=item_data["discount_amount"],
+                                line_total=item_data["line_total"]
+                            )
+                            session.add(tx_item)
+                        
+                        session.commit()
+            
+            out["transactions_created"] = len(members) * 5
         return out
 
     if args.products_only:
