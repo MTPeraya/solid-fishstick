@@ -16,6 +16,7 @@ from .models.transaction import Transaction
 from .models.cashier import Cashier
 from .models.manager import Manager
 from .models.transaction_item import TransactionItem
+from .models.promotion import Promotion
 from .models import promotion as _promotion_model
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -144,8 +145,50 @@ def seed_users(session: Session, num_managers: int = 2, num_cashiers: int = 8) -
     return user_ids
 
 
-def seed_products(session: Session, count: int = 40) -> list[int]:
-    """Seed realistic product catalog"""
+def seed_promotions(session: Session, count: int = 4) -> list[int]:
+    """Seed promotional discounts"""
+    promotions_data = [
+        ("Summer Sale", "PERCENTAGE", Decimal("15.00"), 30, 60),
+        ("Buy More Save More", "PERCENTAGE", Decimal("10.00"), 0, 90),
+        ("Flash Deal", "FIXED", Decimal("5.00"), 0, 30),
+        ("Weekend Special", "PERCENTAGE", Decimal("20.00"), 0, 14),
+        ("Clearance Sale", "PERCENTAGE", Decimal("25.00"), 0, 45),
+        ("New Year Promo", "FIXED", Decimal("10.00"), 0, 60),
+        ("Member Exclusive", "PERCENTAGE", Decimal("12.00"), 0, 90),
+        ("Hot Deal", "FIXED", Decimal("8.00"), 0, 21),
+    ]
+    
+    promotion_ids = []
+    today = date.today()
+    
+    for i in range(min(count, len(promotions_data))):
+        name, disc_type, disc_value, days_ago, duration = promotions_data[i]
+        
+        start = today - timedelta(days=days_ago)
+        end = start + timedelta(days=duration)
+        
+        # Check if promotion exists
+        promo = session.exec(select(Promotion).where(Promotion.promotion_name == name)).first()
+        if not promo:
+            promo = Promotion(
+                promotion_name=name,
+                discount_type=disc_type,
+                discount_value=disc_value,
+                start_date=start,
+                end_date=end,
+                is_active=True
+            )
+            session.add(promo)
+            session.commit()
+            session.refresh(promo)
+        
+        promotion_ids.append(promo.promotion_id)
+    
+    return promotion_ids
+
+
+def seed_products(session: Session, count: int = 40, assign_promotions: bool = True) -> list[int]:
+    """Seed realistic product catalog with optional promotion assignment"""
     brands = [
         "Acme", "FreshFarm", "CleanCo", "BakeCo", "RiceCo", "SnackCo", "DrinkCo",
         "DairyPure", "FitLife", "QuickBite", "GlowCare", "HomeWorks", "Sparkle",
@@ -208,6 +251,11 @@ def seed_products(session: Session, count: int = 40) -> list[int]:
     product_ids = []
     categories = list(categories_data.keys())
     
+    # Get available promotions if we should assign them
+    available_promotions = []
+    if assign_promotions:
+        available_promotions = session.exec(select(Promotion)).all()
+    
     for i in range(count):
         category = categories[i % len(categories)]
         cat_data = categories_data[category]
@@ -229,6 +277,11 @@ def seed_products(session: Session, count: int = 40) -> list[int]:
         
         barcode = f"{1000000000000 + i:013d}"
         
+        # Assign promotion to ~30% of products
+        promotion_id = None
+        if available_promotions and random.random() < 0.30:
+            promotion_id = random.choice(available_promotions).promotion_id
+        
         # Check if product exists
         product = session.exec(select(Product).where(Product.barcode == barcode)).first()
         if not product:
@@ -240,7 +293,8 @@ def seed_products(session: Session, count: int = 40) -> list[int]:
                 cost_price=cost,
                 selling_price=sell,
                 stock_quantity=stock,
-                min_stock=min_stock
+                min_stock=min_stock,
+                promotion_id=promotion_id
             )
             session.add(product)
             session.commit()
@@ -311,16 +365,31 @@ def seed_transactions(session: Session, num_transactions: int = 50, days_back: i
         num_items = random.randint(1, 6)
         selected_products = random.sample(products, min(num_items, len(products)))
         
-        # Calculate transaction totals
+        # Calculate transaction totals with promotion discounts
         subtotal = Decimal("0.00")
+        total_product_discount = Decimal("0.00")
         items_data = []
         
         for prod in selected_products:
             quantity = random.randint(1, 4)
             unit_price = prod.selling_price
+            
+            # Calculate promotion discount if product has one
             discount = Decimal("0.00")
+            if prod.promotion_id:
+                promo = session.exec(select(Promotion).where(Promotion.promotion_id == prod.promotion_id)).first()
+                if promo and promo.is_active:
+                    # Check if promotion is active for this transaction date
+                    tx_date_only = tx_date.date()
+                    if promo.start_date <= tx_date_only <= promo.end_date:
+                        if promo.discount_type == "PERCENTAGE":
+                            discount = ((unit_price * quantity) * promo.discount_value / Decimal("100")).quantize(Decimal("0.01"))
+                        elif promo.discount_type == "FIXED":
+                            discount = (promo.discount_value * quantity).quantize(Decimal("0.01"))
+            
             line_total = (unit_price * quantity) - discount
             subtotal += line_total
+            total_product_discount += discount
             
             items_data.append({
                 "product_id": prod.product_id,
@@ -343,7 +412,7 @@ def seed_transactions(session: Session, num_transactions: int = 50, days_back: i
             employee_id=cashier.uid,
             member_id=member.member_id if member else None,
             subtotal=subtotal,
-            product_discount=Decimal("0.00"),
+            product_discount=total_product_discount,
             membership_discount=membership_discount,
             total_amount=total_amount,
             payment_method=random.choice(payment_methods)
@@ -397,6 +466,9 @@ def seed_all(
         
         print(f"Seeding users ({num_managers} managers, {num_cashiers} cashiers)...")
         result["users"] = seed_users(session, num_managers, num_cashiers)
+        
+        print("Seeding promotions...")
+        result["promotions"] = seed_promotions(session, 4)
         
         print(f"Seeding {num_products} products...")
         result["products"] = seed_products(session, num_products)
@@ -470,6 +542,22 @@ def seed_only_members(count: int = 10, reset: bool = False) -> dict:
     return {"members": members}
 
 
+def seed_only_promotions(count: int = 4, reset: bool = False) -> dict:
+    """Seed only promotions"""
+    ensure_schema(reset=reset)
+    with Session(engine) as session:
+        if reset:
+            # Clear promotion assignments from products first
+            for prod in session.exec(select(Product).where(Product.promotion_id.isnot(None))).all():
+                prod.promotion_id = None
+                session.add(prod)
+            for promo in session.exec(select(Promotion)).all():
+                session.delete(promo)
+            session.commit()
+        promotions = seed_promotions(session, count)
+    return {"promotions": promotions}
+
+
 def seed_only_transactions(count: int = 50, days_back: int = 30, reset: bool = False) -> dict:
     """Seed only transactions"""
     ensure_schema(reset=reset)
@@ -498,6 +586,7 @@ if __name__ == "__main__":
     parser.add_argument("--all", action="store_true", help="Seed all data at once")
     parser.add_argument("--tiers", action="store_true", help="Seed only membership tiers")
     parser.add_argument("--users", action="store_true", help="Seed only users")
+    parser.add_argument("--promotions", action="store_true", help="Seed only promotions")
     parser.add_argument("--products", action="store_true", help="Seed only products")
     parser.add_argument("--members", action="store_true", help="Seed only members")
     parser.add_argument("--transactions", action="store_true", help="Seed only transactions")
@@ -509,6 +598,7 @@ if __name__ == "__main__":
     # Counts
     parser.add_argument("--managers", type=int, default=2, help="Number of managers (default: 2)")
     parser.add_argument("--cashiers", type=int, default=8, help="Number of cashiers (default: 8)")
+    parser.add_argument("--promotion-count", type=int, default=4, help="Number of promotions (default: 4)")
     parser.add_argument("--product-count", type=int, default=40, help="Number of products (default: 40)")
     parser.add_argument("--member-count", type=int, default=10, help="Number of members (default: 10)")
     parser.add_argument("--transaction-count", type=int, default=50, help="Number of transactions (default: 50)")
@@ -538,6 +628,12 @@ if __name__ == "__main__":
             result = seed_only_users(
                 num_managers=args.managers,
                 num_cashiers=args.cashiers,
+                reset=args.reset
+            )
+        
+        elif args.promotions:
+            result = seed_only_promotions(
+                count=args.promotion_count,
                 reset=args.reset
             )
         
