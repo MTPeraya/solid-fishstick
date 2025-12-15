@@ -267,7 +267,7 @@ export default function ManagerPromotionPage() {
             <option value="FIXED">Fixed Amount (฿)</option>
           </select>
           
-          <input className="border rounded px-3 py-2" placeholder="Discount Value (e.g. 20.00)" type="number" step="0.01" min="0.01" value={newPromo.discount_value} onChange={(e) => handleNewPromoChange('discount_value', e.target.value)} required disabled={editId !== null} />
+          <input className="border rounded px-3 py-2" placeholder="Discount Value" type="number" step="1" min="0" value={newPromo.discount_value} onChange={(e) => handleNewPromoChange('discount_value', e.target.value)} required disabled={editId !== null} />
           
           <label className="flex items-center gap-2 border rounded px-3 py-2 bg-white">
             Active:
