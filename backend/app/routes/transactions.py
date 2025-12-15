@@ -316,3 +316,43 @@ def get_category_sales_analytics(session: Session = Depends(get_session), curren
         }
         for r in results
     ]
+
+
+@router.get("/analytics/profit")
+def get_profit_analytics(session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
+    """Get profit analytics: total revenue, cost, and profit"""
+    if current_user.role not in ("manager",):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    
+    from sqlalchemy import func
+    
+    # Calculate total revenue and cost from transaction items
+    stmt = (
+        select(
+            func.sum(TransactionItem.line_total).label("total_revenue"),
+            func.sum(TransactionItem.quantity * Product.cost_price).label("total_cost")
+        )
+        .join(Product, TransactionItem.product_id == Product.product_id)
+    )
+    
+    result = session.exec(stmt).first()
+    
+    if result and result.total_revenue:
+        total_revenue = float(result.total_revenue)
+        total_cost = float(result.total_cost) if result.total_cost else 0
+        total_profit = total_revenue - total_cost
+        profit_margin = (total_profit / total_revenue * 100) if total_revenue > 0 else 0
+        
+        return {
+            "total_revenue": total_revenue,
+            "total_cost": total_cost,
+            "total_profit": total_profit,
+            "profit_margin": profit_margin
+        }
+    
+    return {
+        "total_revenue": 0,
+        "total_cost": 0,
+        "total_profit": 0,
+        "profit_margin": 0
+    }

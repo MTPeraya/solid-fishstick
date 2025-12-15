@@ -33,6 +33,13 @@ type CategorySales = {
   transaction_count: number
 }
 
+type ProfitData = {
+  total_revenue: number
+  total_cost: number
+  total_profit: number
+  profit_margin: number
+}
+
 type Product = {
   product_id: number
   name: string
@@ -48,6 +55,7 @@ export default function ManagerDashboardPage() {
   const [dailySales, setDailySales] = useState<DailySales[]>([])
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [categorySales, setCategorySales] = useState<CategorySales[]>([])
+  const [profitData, setProfitData] = useState<ProfitData | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,11 +69,12 @@ export default function ManagerDashboardPage() {
     try {
       const headers = { Authorization: `Bearer ${token}` }
       
-      const [productSalesData, dailySalesData, paymentData, categoryData, productsData] = await Promise.all([
+      const [productSalesData, dailySalesData, paymentData, categoryData, profitDataRes, productsData] = await Promise.all([
         api.get("/api/transactions/analytics/product-sales", { headers }) as Promise<ProductSales[]>,
         api.get("/api/transactions/analytics/daily-sales?days=30", { headers }) as Promise<DailySales[]>,
         api.get("/api/transactions/analytics/payment-methods", { headers }) as Promise<PaymentMethod[]>,
         api.get("/api/transactions/analytics/category-sales", { headers }) as Promise<CategorySales[]>,
+        api.get("/api/transactions/analytics/profit", { headers }) as Promise<ProfitData>,
         api.get("/api/products") as Promise<any[]>
       ])
 
@@ -73,6 +82,7 @@ export default function ManagerDashboardPage() {
       setDailySales(dailySalesData)
       setPaymentMethods(paymentData)
       setCategorySales(categoryData)
+      setProfitData(profitDataRes)
       setProducts(productsData.map(p => ({
         product_id: p.product_id,
         name: p.name,
@@ -129,12 +139,20 @@ export default function ManagerDashboardPage() {
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 border border-blue-200 rounded-lg">
           <p className="text-sm font-medium text-blue-700">Total Revenue</p>
           <p className="text-2xl font-bold text-blue-900 mt-1">{formatCurrency(analytics.totalSales)}</p>
-          <p className="text-xs text-blue-600 mt-1">Total money earned from all sales</p>
+          <p className="text-xs text-blue-600 mt-1">Money earned from sales</p>
         </div>
+        
+        {profitData && (
+          <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 p-4 border border-emerald-200 rounded-lg">
+            <p className="text-sm font-medium text-emerald-700">Total Profit</p>
+            <p className="text-2xl font-bold text-emerald-900 mt-1">{formatCurrency(profitData.total_profit)}</p>
+            <p className="text-xs text-emerald-600 mt-1">{profitData.profit_margin.toFixed(1)}% margin</p>
+          </div>
+        )}
         
         <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 border border-green-200 rounded-lg">
           <p className="text-sm font-medium text-green-700">Transactions</p>
@@ -389,12 +407,12 @@ export default function ManagerDashboardPage() {
                 </svg>
                 
                 {/* Y-axis labels */}
-                <div className="absolute left-0 top-0 bottom-0 -ml-12 flex flex-col justify-between text-xs text-gray-500">
-                  <span>{formatCurrency(analytics.maxDailySales)}</span>
-                  <span>{formatCurrency(analytics.maxDailySales * 0.75)}</span>
-                  <span>{formatCurrency(analytics.maxDailySales * 0.5)}</span>
-                  <span>{formatCurrency(analytics.maxDailySales * 0.25)}</span>
-                  <span>฿0</span>
+                <div className="absolute left-0 top-0 bottom-0 -ml-16 flex flex-col justify-between text-xs text-gray-500 text-right w-14">
+                  <span className="block">{formatCurrency(analytics.maxDailySales)}</span>
+                  <span className="block">{formatCurrency(analytics.maxDailySales * 0.75)}</span>
+                  <span className="block">{formatCurrency(analytics.maxDailySales * 0.5)}</span>
+                  <span className="block">{formatCurrency(analytics.maxDailySales * 0.25)}</span>
+                  <span className="block">฿0</span>
                 </div>
               </div>
               
