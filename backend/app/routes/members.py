@@ -54,7 +54,7 @@ def create_member(data: MemberCreate, session: Session = Depends(get_session), c
 
 @router.get("", response_model=list[MemberSummary])
 def list_members(q: str | None = Query(default=None), session: Session = Depends(get_session), current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
+    if current_user.role not in ("manager", "cashier"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     stmt = select(Member)
     if q:

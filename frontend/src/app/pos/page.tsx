@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { api } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
 
-// --- New Types ---
 type Promotion = {
   promotion_id: number
   promotion_name: string
@@ -15,8 +14,17 @@ type Promotion = {
   is_active: boolean
 }
 
-// Product type updated to include promotion_id
-type Product = { product_id: number; barcode: string; name: string; brand?: string | null; category?: string | null; selling_price: string | number; stock_quantity: number; promotion_id?: number | null }
+type Product = { 
+  product_id: number
+  barcode: string
+  name: string
+  brand?: string | null
+  category?: string | null
+  selling_price: string | number
+  stock_quantity: number
+  promotion_id?: number | null
+}
+
 type CartItem = { product: Product; quantity: number }
 
 export default function PosPage() {
@@ -34,25 +42,56 @@ export default function PosPage() {
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberPhone, setNewMemberPhone] = useState('')
   const [creatingMember, setCreatingMember] = useState(false)
-  const [memberPhoneError, setMemberPhoneError] = useState<string | null>(null)
-  const [newMemberPhoneError, setNewMemberPhoneError] = useState<string | null>(null)
+  const [showCreateMember, setShowCreateMember] = useState(false)
+  const [memberDiscountRate, setMemberDiscountRate] = useState<number>(0)
 
   const fetchPromotions = useCallback(async () => {
     if (!token) return
     try {
-        // Only fetch promotions if logged in (token exists)
-        const promoData = await api.get('/api/promotions?active_only=true', { headers: { Authorization: `Bearer ${token}` } })
-        setPromotions(promoData as Promotion[]);
+      const promoData = await api.get('/api/promotions?active_only=true', { headers: { Authorization: `Bearer ${token}` } })
+      setPromotions(promoData as Promotion[])
     } catch (e) {
-        console.error("Failed to fetch promotions:", e)
-        // This is not a critical error for POS function, so we don't display it to the cashier
+      console.error("Failed to fetch promotions:", e)
     }
   }, [token])
 
-  useEffect(() => {
-      fetchPromotions()
-  }, [fetchPromotions])
+  useEffect(() => { fetchPromotions() }, [fetchPromotions])
 
+  // Fetch member discount rate when phone changes
+  useEffect(() => {
+    const fetchMemberDiscount = async () => {
+      const phone = memberPhone.trim()
+      if (!token || !phone || !/^\d{10}$/.test(phone)) {
+        setMemberDiscountRate(0)
+        return
+      }
+      
+      try {
+        const members = await api.get(`/api/members?q=${encodeURIComponent(phone)}`, { 
+          headers: { Authorization: `Bearer ${token}` } 
+        }) as any[]
+        
+        if (members && members.length > 0) {
+          const member = members.find((m: any) => m.phone === phone)
+          if (member) {
+            // Use current_discount_rate which reflects the rolling-year tier
+            const rate = Number(member.current_discount_rate || member.discount_rate) || 0
+            setMemberDiscountRate(rate)
+          } else {
+            setMemberDiscountRate(0)
+          }
+        } else {
+          setMemberDiscountRate(0)
+        }
+      } catch (e) {
+        console.error('Failed to fetch member:', e)
+        setMemberDiscountRate(0)
+      }
+    }
+    
+    const timer = setTimeout(fetchMemberDiscount, 500)
+    return () => clearTimeout(timer)
+  }, [memberPhone, token])
 
   useEffect(() => {
     let cancelled = false
@@ -91,28 +130,28 @@ export default function PosPage() {
       if (idx >= 0) {
         const next = [...prev]
         if (next[idx].quantity + 1 > p.stock_quantity) {
-             setErr(`Cannot add more than available stock (${p.stock_quantity}) for ${p.name}`)
-             return prev
+          setErr(`Cannot add more than available stock (${p.stock_quantity}) for ${p.name}`)
+          return prev
         }
         next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 }
         return next
       }
       return [...prev, { product: p, quantity: 1 }]
     })
-    setErr(null) 
+    setErr(null)
   }
 
   function updateQty(pid: number, qty: number) {
     setCart((prev) => prev.map((it) => {
-        if (it.product.product_id === pid) {
-            const newQty = Math.max(1, qty)
-            if (newQty > it.product.stock_quantity) {
-                 setErr(`Cannot exceed available stock (${it.product.stock_quantity}) for ${it.product.name}`)
-                 return it
-            }
-            return { ...it, quantity: newQty } 
+      if (it.product.product_id === pid) {
+        const newQty = Math.max(1, qty)
+        if (newQty > it.product.stock_quantity) {
+          setErr(`Cannot exceed available stock (${it.product.stock_quantity}) for ${it.product.name}`)
+          return it
         }
-        return it
+        return { ...it, quantity: newQty }
+      }
+      return it
     }))
     setErr(null)
   }
@@ -122,20 +161,50 @@ export default function PosPage() {
   }
 
   const subtotal = useMemo(() => cart.reduce((sum, it) => sum + Number(it.product.selling_price) * it.quantity, 0), [cart])
+  
+  const estimatedDiscounts = useMemo(() => {
+    let promoDiscount = 0
+    
+    // Calculate promotion discounts
+    cart.forEach(item => {
+      const promo = promotions.find(p => p.promotion_id === item.product.promotion_id)
+      if (promo) {
+        const itemTotal = Number(item.product.selling_price) * item.quantity
+        if (promo.discount_type === 'PERCENTAGE') {
+          promoDiscount += itemTotal * (Number(promo.discount_value) / 100)
+        } else if (promo.discount_type === 'FIXED') {
+          promoDiscount += Number(promo.discount_value) * item.quantity
+        }
+      }
+    })
+    
+    const subtotalAfterPromo = subtotal - promoDiscount
+    
+    // Calculate member discount using actual member's discount rate
+    const memberDiscount = memberDiscountRate > 0 ? subtotalAfterPromo * (memberDiscountRate / 100) : 0
+    
+    const estimatedTotal = subtotalAfterPromo - memberDiscount
+    
+    return {
+      promoDiscount,
+      memberDiscount,
+      subtotalAfterPromo,
+      estimatedTotal
+    }
+  }, [cart, promotions, subtotal, memberDiscountRate])
 
   const getPromoText = (productId?: number | null): string => {
-    const product = cart.find(item => item.product.product_id === productId)?.product;
-    const promoId = product?.promotion_id;
-    if (!promoId) return '';
+    const product = cart.find(item => item.product.product_id === productId)?.product || results.find(p => p.product_id === productId)
+    const promoId = product?.promotion_id
+    if (!promoId) return ''
 
-    // Check if the assigned promotion ID is currently active
-    const promo = promotions.find(p => p.promotion_id === promoId);
-    if (!promo) return '';
+    const promo = promotions.find(p => p.promotion_id === promoId)
+    if (!promo) return ''
 
-    const value = Number(promo.discount_value).toFixed(0);
-    const type = promo.discount_type === 'PERCENTAGE' ? `${value}% OFF` : `฿${value} OFF`;
+    const value = Number(promo.discount_value).toFixed(0)
+    const type = promo.discount_type === 'PERCENTAGE' ? `${value}%` : `฿${value}`
 
-    return `(Promo: ${type})`;
+    return type
   }
 
   async function checkout() {
@@ -144,13 +213,12 @@ export default function PosPage() {
     if (!token) { setErr('Not signed in'); return }
     if (cart.length === 0) { setErr('Cart is empty'); return }
     const mp = memberPhone.trim()
-    if (mp && !/^\d{10}$/.test(mp)) { setMemberPhoneError('Phone must be 10 digits'); return }
-    setMemberPhoneError(null)
-    
+    if (mp && !/^\d{10}$/.test(mp)) { setErr('Phone must be 10 digits'); return }
+
     const overStockItem = cart.find(item => item.quantity > item.product.stock_quantity)
     if (overStockItem) {
-        setErr(`Quantity for ${overStockItem.product.name} exceeds available stock (${overStockItem.product.stock_quantity})`)
-        return
+      setErr(`Quantity for ${overStockItem.product.name} exceeds available stock (${overStockItem.product.stock_quantity})`)
+      return
     }
 
     setSubmitting(true)
@@ -160,19 +228,18 @@ export default function PosPage() {
       const phone = memberPhone.trim()
       if (phone) body.member_phone = phone
       const data = await api.post('/api/transactions', body, { headers: { Authorization: `Bearer ${token}` } })
-      
-      const finalTotal = Number(data.total_amount).toFixed(2);
-      const memberDisc = Number(data.membership_discount).toFixed(2);
-      const productDisc = Number(data.product_discount).toFixed(2);
-      const initialSubtotal = (Number(data.subtotal) + Number(data.product_discount)).toFixed(2)
-      
-      setOkMsg(`Sale completed. TX# ${data.transaction_id}. Paid: ฿${finalTotal} (Original Total: ฿${initialSubtotal}, Product Discount: ฿${productDisc}, Member Discount: ฿${memberDisc})`)
-      
+
+      const finalTotal = Number(data.total_amount).toFixed(2)
+      const memberDisc = Number(data.membership_discount).toFixed(2)
+      const productDisc = Number(data.product_discount).toFixed(2)
+
+      setOkMsg(`✅ Sale completed! Transaction #${data.transaction_id} | Total: ฿${finalTotal}`)
+
       setCart([])
       setQ('')
       setResults([])
       setMemberPhone('')
-      fetchPromotions() 
+      fetchPromotions()
     } catch (e: any) {
       setErr(e?.message || 'Checkout failed')
     } finally {
@@ -187,12 +254,11 @@ export default function PosPage() {
     const name = newMemberName.trim()
     const phone = newMemberPhone.trim()
     if (!name || !phone) { setErr('Name and phone required'); return }
-    if (!/^\d{10}$/.test(phone)) { setNewMemberPhoneError('Phone must be 10 digits'); return }
-    setNewMemberPhoneError(null)
+    if (!/^\d{10}$/.test(phone)) { setErr('Phone must be 10 digits'); return }
     setCreatingMember(true)
     try {
       const data = await api.post('/api/members', { name, phone }, { headers: { Authorization: `Bearer ${token}` } })
-      setOkMsg(`Member created (#${data.member_id})`)
+      setOkMsg(`✅ Member created! ID: ${data.member_id}`)
       setMemberPhone(data.phone)
       setNewMemberName('')
       setNewMemberPhone('')
@@ -204,110 +270,276 @@ export default function PosPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="space-y-3">
-          <div>
-            <label className="text-sm font-medium">Search products</label>
-            <input className="mt-1 w-full border rounded px-3 py-2" type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, brand, category, barcode" />
-          </div>
-          <div className="border rounded p-3 bg-gray-50 max-h-64 overflow-auto">
-            {results.length === 0 ? (
-              <div className="text-sm text-gray-600">No results</div>
-            ) : (
-              <ul className="space-y-2">
-                {results.map((p) => (
-                  <li key={p.product_id} className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{p.name} <span className="text-red-500 text-xs font-normal">{getPromoText(p.product_id)}</span></div> 
-                      <div className="text-xs text-gray-600">{p.brand || ''} · {p.category || ''}</div>
-                      <div className="text-xs">Barcode: {p.barcode}</div>
-                    </div>
-                    <button className="px-3 py-1 rounded bg-black text-white" onClick={() => addToCart(p)}>
-                      Add
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div>
-            <label className="text-sm font-medium">Scan barcode</label>
-            <div className="mt-1 flex gap-2">
-              <input className="flex-1 border rounded px-3 py-2" type="text" value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="Barcode" onKeyDown={(e) => { if (e.key === 'Enter') addBarcode() }} />
-              <button className="px-3 py-2 rounded bg-black text-white" onClick={addBarcode}>Add</button>
-            </div>
+    <div className="h-[calc(100vh-120px)] flex gap-4 overflow-hidden">
+      {/* Left Panel - Product Search */}
+      <div className="w-96 flex flex-col space-y-4 shrink-0">
+        {/* Search Box */}
+        <div className="bg-white border rounded-lg p-4 shadow-sm">
+          <label className="text-sm font-semibold text-gray-700 block mb-2">🔍 Search Products</label>
+          <input 
+            className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 focus:border-blue-500 focus:outline-none" 
+            type="text" 
+            value={q} 
+            onChange={(e) => setQ(e.target.value)} 
+            placeholder="Name, brand, category..." 
+          />
+        </div>
+
+        {/* Barcode Scanner */}
+        <div className="bg-white border rounded-lg p-4 shadow-sm">
+          <label className="text-sm font-semibold text-gray-700 block mb-2">📷 Scan Barcode</label>
+          <div className="flex gap-2">
+            <input 
+              className="flex-1 border-2 border-gray-300 rounded-lg px-4 py-2.5 focus:border-blue-500 focus:outline-none" 
+              type="text" 
+              value={barcode} 
+              onChange={(e) => setBarcode(e.target.value)} 
+              placeholder="Scan or type barcode" 
+              onKeyDown={(e) => { if (e.key === 'Enter') addBarcode() }} 
+            />
+            <button 
+              className="px-6 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors" 
+              onClick={addBarcode}
+            >
+              Add
+            </button>
           </div>
         </div>
 
-        <div className="md:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="text-lg font-medium">Cart</div>
-            <div className="text-sm">Est. Pre-Discount Subtotal: ฿{subtotal.toFixed(2)}</div> 
+        {/* Search Results */}
+        <div className="bg-white border rounded-lg shadow-sm flex-1 overflow-hidden flex flex-col min-h-0">
+          <div className="p-4 border-b bg-gray-50 shrink-0">
+            <h3 className="font-semibold text-gray-700">Search Results</h3>
           </div>
-          <div className="border rounded p-3">
-            {cart.length === 0 ? (
-              <div className="text-sm text-gray-600">Cart is empty</div>
+          <div className="flex-1 overflow-y-auto p-4">
+            {results.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">
+                <div className="text-4xl mb-2">📦</div>
+                <div className="text-sm">No products found</div>
+              </div>
             ) : (
-              <ul className="space-y-2">
-                {cart.map((it) => (
-                  <li key={it.product.product_id} className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{it.product.name}</div>
-                      <div className="text-xs text-gray-600">
-                         ฿{Number(it.product.selling_price).toFixed(2)} · Stock {it.product.stock_quantity} 
-                         <span className="text-red-500 ml-1 text-xs font-normal">{getPromoText(it.product.product_id)}</span> 
+              <div className="space-y-2">
+                {results.map((p) => {
+                  const promo = getPromoText(p.product_id)
+                  return (
+                    <div key={p.product_id} className="border rounded-lg p-3 hover:border-blue-500 hover:shadow-md transition-all">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900 truncate">{p.name}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{p.brand} • {p.category}</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-sm font-semibold text-gray-900">฿{Number(p.selling_price).toFixed(2)}</span>
+                            {promo && (
+                              <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                                {promo} OFF
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5">Stock: {p.stock_quantity}</div>
+                        </div>
+                        <button 
+                          className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors shrink-0" 
+                          onClick={() => addToCart(p)}
+                        >
+                          Add
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button className="px-2 py-1 rounded border" onClick={() => updateQty(it.product.product_id, it.quantity - 1)}>-</button>
-                      <input className="w-14 border rounded px-2 py-1 text-center" type="number" min={1} value={it.quantity} onChange={(e) => updateQty(it.product.product_id, Number(e.target.value))} />
-                      <button className="px-2 py-1 rounded border" onClick={() => updateQty(it.product.product_id, it.quantity + 1)}>+</button>
-                      <button className="px-2 py-1 rounded border" onClick={() => removeItem(it.product.product_id)}>Remove</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                  )
+                })}
+              </div>
             )}
           </div>
+        </div>
+      </div>
 
-          <div className="border rounded p-3">
-            <div className="text-sm font-medium">Create Member</div>
-            <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input className="w-full border rounded px-3 py-2" type="text" value={newMemberName} onChange={(e) => setNewMemberName(e.target.value)} placeholder="Full name" />
-              <div>
-                <input className="w-full border rounded px-3 py-2" type="text" value={newMemberPhone} onChange={(e) => { setNewMemberPhone(e.target.value); if (e.target.value.trim() && !/^\d{10}$/.test(e.target.value.trim())) setNewMemberPhoneError('Phone must be 10 digits'); else setNewMemberPhoneError(null) }} placeholder="Phone number" />
-                {newMemberPhoneError && <div className="text-xs text-red-600 mt-1">{newMemberPhoneError}</div>}
+      {/* Right Panel - Cart & Checkout */}
+      <div className="flex-1 flex flex-col space-y-4 min-w-0">
+        {/* Cart */}
+        <div className="bg-white border rounded-lg shadow-sm flex-1 overflow-hidden flex flex-col min-h-0">
+          <div className="p-4 border-b bg-gray-50 shrink-0">
+            <h3 className="font-semibold text-gray-700">🛒 Cart ({cart.length} items)</h3>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            {cart.length === 0 ? (
+              <div className="text-center text-gray-400 py-12">
+                <div className="text-5xl mb-3">🛒</div>
+                <div className="text-lg font-medium">Cart is empty</div>
+                <div className="text-sm mt-1">Add products to get started</div>
               </div>
-              <button className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={createMember} disabled={creatingMember || !newMemberName.trim() || !newMemberPhone.trim() || !!newMemberPhoneError}>
-                {creatingMember ? 'Creating…' : 'Create'}
-              </button>
+            ) : (
+              <div className="space-y-3">
+                {cart.map((it) => {
+                  const promo = getPromoText(it.product.product_id)
+                  return (
+                    <div key={it.product.product_id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900">{it.product.name}</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-sm text-gray-600">฿{Number(it.product.selling_price).toFixed(2)}</span>
+                            {promo && (
+                              <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
+                                {promo} OFF
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5">Stock: {it.product.stock_quantity}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-blue-500 hover:bg-blue-50 flex items-center justify-center font-bold text-gray-700" 
+                            onClick={() => updateQty(it.product.product_id, it.quantity - 1)}
+                          >
+                            −
+                          </button>
+                          <div className="w-16 border-2 border-gray-300 rounded-lg px-2 py-1.5 text-center font-semibold bg-gray-50">
+                            {it.quantity}
+                          </div>
+                          <button 
+                            className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-blue-500 hover:bg-blue-50 flex items-center justify-center font-bold text-gray-700" 
+                            onClick={() => updateQty(it.product.product_id, it.quantity + 1)}
+                          >
+                            +
+                          </button>
+                          <button 
+                            className="ml-2 px-3 py-1.5 rounded-lg border-2 border-red-300 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors" 
+                            onClick={() => removeItem(it.product.product_id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-2 pt-2 border-t flex justify-between text-sm">
+                        <span className="text-gray-600">Line Total:</span>
+                        <span className="font-semibold text-gray-900">฿{(Number(it.product.selling_price) * it.quantity).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Member & Payment */}
+        <div className="bg-white border rounded-lg p-3 shadow-sm space-y-3 shrink-0">
+          {/* Member Create - Collapsible */}
+          <div className="border-2 border-dashed border-gray-300 rounded-lg overflow-hidden">
+            <button
+              className="w-full p-2.5 text-left text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
+              onClick={() => setShowCreateMember(!showCreateMember)}
+            >
+              <span>➕ Create Member</span>
+              <span className="text-gray-400 text-xs">{showCreateMember ? '▼' : '▶'}</span>
+            </button>
+            <div className={`transition-all duration-300 ease-in-out ${showCreateMember ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'}`}>
+              <div className="p-2.5 pt-0 border-t">
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  <input 
+                    className="border-2 border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none" 
+                    type="text" 
+                    value={newMemberName} 
+                    onChange={(e) => setNewMemberName(e.target.value)} 
+                    placeholder="Full name" 
+                  />
+                  <input 
+                    className="border-2 border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:border-blue-500 focus:outline-none" 
+                    type="text" 
+                    value={newMemberPhone} 
+                    onChange={(e) => setNewMemberPhone(e.target.value)} 
+                    placeholder="Phone (10 digits)" 
+                  />
+                  <button 
+                    className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+                    onClick={createMember} 
+                    disabled={creatingMember || !newMemberName.trim() || !newMemberPhone.trim()}
+                  >
+                    {creatingMember ? 'Creating...' : 'Create'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="text-sm font-medium">Member Phone (optional)</label>
-              <input className="mt-1 w-full border rounded px-3 py-2" type="text" value={memberPhone} onChange={(e) => { setMemberPhone(e.target.value); if (e.target.value.trim() && !/^\d{10}$/.test(e.target.value.trim())) setMemberPhoneError('Phone must be 10 digits'); else setMemberPhoneError(null) }} placeholder="Phone number" />
-              {memberPhoneError && <div className="text-xs text-red-600 mt-1">{memberPhoneError}</div>}
+          {/* Total Summary */}
+          {cart.length > 0 && (
+            <div className="bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-gray-300 rounded-lg p-3">
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-600">Subtotal:</span>
+                  <span className="font-semibold text-gray-900">฿{subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className={estimatedDiscounts.promoDiscount > 0 ? "text-red-600" : "text-gray-400"}>Promotion Discount:</span>
+                  <span className={`font-semibold ${estimatedDiscounts.promoDiscount > 0 ? "text-red-600" : "text-gray-400"}`}>
+                    -฿{estimatedDiscounts.promoDiscount.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className={estimatedDiscounts.memberDiscount > 0 ? "text-blue-600" : "text-gray-400"}>
+                    Member Discount {memberDiscountRate > 0 ? `(${memberDiscountRate}%)` : ''}:
+                  </span>
+                  <span className={`font-semibold ${estimatedDiscounts.memberDiscount > 0 ? "text-blue-600" : "text-gray-400"}`}>
+                    -฿{estimatedDiscounts.memberDiscount.toFixed(2)}
+                  </span>
+                </div>
+                <div className="border-t-2 border-gray-300 pt-1.5 mt-1.5">
+                  <div className="flex justify-between">
+                    <span className="font-bold text-sm text-gray-900">Estimated Total:</span>
+                    <span className="font-bold text-lg text-green-600">฿{estimatedDiscounts.estimatedTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium">Payment method</label>
-              <select className="mt-1 w-full border rounded px-3 py-2" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as any)}>
+          )}
+
+          {/* Checkout Section */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-gray-700 block mb-1.5">👤 Member Phone</label>
+              <input 
+                className="w-full border-2 border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:border-blue-500 focus:outline-none" 
+                type="text" 
+                value={memberPhone} 
+                onChange={(e) => setMemberPhone(e.target.value)} 
+                placeholder="Optional" 
+              />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-gray-700 block mb-1.5">💳 Payment</label>
+              <select 
+                className="w-full border-2 border-gray-300 rounded-lg px-2.5 py-2 text-sm focus:border-blue-500 focus:outline-none h-[38px]" 
+                value={paymentMethod} 
+                onChange={(e) => setPaymentMethod(e.target.value as any)}
+              >
                 <option>Cash</option>
                 <option>Card</option>
                 <option>QR Code</option>
               </select>
             </div>
-            <div className="flex items-end">
-              <button className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={checkout} disabled={submitting || cart.length === 0 || (!!memberPhone.trim() && !!memberPhoneError)}>
-                {submitting ? 'Processing…' : 'Checkout'}
+            <div className="flex flex-col justify-end">
+              <button 
+                className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold text-base hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg h-[38px]" 
+                onClick={checkout} 
+                disabled={submitting || cart.length === 0}
+              >
+                {submitting ? 'Processing...' : `Pay ฿${estimatedDiscounts.estimatedTotal.toFixed(2)}`}
               </button>
             </div>
           </div>
 
-          {err && <div className="text-sm text-red-600">{err}</div>}
-          {okMsg && <div className="text-sm text-green-700">{okMsg}</div>}
+          {/* Messages */}
+          {err && (
+            <div className="bg-red-50 border-2 border-red-200 rounded-lg p-2 text-xs text-red-700 font-medium">
+              ❌ {err}
+            </div>
+          )}
+          {okMsg && (
+            <div className="bg-green-50 border-2 border-green-200 rounded-lg p-2 text-xs text-green-700 font-medium">
+              {okMsg}
+            </div>
+          )}
         </div>
       </div>
     </div>
