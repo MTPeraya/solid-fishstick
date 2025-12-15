@@ -286,6 +286,42 @@ if __name__ == "__main__":
                 m = get_or_create_member(session, name, phone, date.today())
                 members.append(m.member_id)
             out["members"] = members
+
+            # Ensure at least one cashier exists to attach transactions to
+            cashier_user = get_or_create_user(session, "seedcashier@example.com", "seedcashier", "Seed Cashier", "cashier", "secret12")
+            if not session.exec(select(Cashier).where(Cashier.employee_id == cashier_user.uid)).first():
+                session.add(Cashier(employee_id=cashier_user.uid))
+                session.commit()
+
+            # Seed transactions per member to cover all tiers in rolling-year spend
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+            tier_targets = [
+                Decimal("3000.00"),   # Bronze (0–4999.99)
+                Decimal("10000.00"),  # Silver (5000–19999.99)
+                Decimal("30000.00"),  # Gold (20000–59999.99)
+                Decimal("80000.00"),  # Platinum (60000+)
+            ]
+            day_offsets = [20, 60, 120, 200, 280]  # all within the last year
+            for idx, mid in enumerate(members):
+                target = tier_targets[idx % len(tier_targets)]
+                # Split target into 5 chunks to create multiple transactions
+                # Use simple proportional splits that sum to 100%
+                splits = [Decimal("0.25"), Decimal("0.20"), Decimal("0.15"), Decimal("0.20"), Decimal("0.20")]
+                for j, frac in enumerate(splits):
+                    amt = (target * frac).quantize(Decimal("0.01"))
+                    tx = Transaction(
+                        transaction_date=now - timedelta(days=day_offsets[j]),
+                        employee_id=cashier_user.uid,
+                        member_id=mid,
+                        subtotal=amt,
+                        product_discount=Decimal("0.00"),
+                        membership_discount=Decimal("0.00"),
+                        total_amount=amt,
+                        payment_method="Cash",
+                    )
+                    session.add(tx)
+            session.commit()
         return out
 
     if args.products_only:
